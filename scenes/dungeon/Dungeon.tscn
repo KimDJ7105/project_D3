@@ -1,0 +1,43 @@
+[gd_scene load_steps=6 format=3 uid="uid://e8631su6xwf3"]
+
+[ext_resource type="Script" path="res://scenes/dungeon/Dungeon.gd" id="1"]
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_floor"]
+size = Vector2(20, 20)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_floor"]
+albedo_color = Color(0.32, 0.35, 0.4, 1)
+roughness = 0.95
+
+[sub_resource type="BoxMesh" id="BoxMesh_extraction"]
+size = Vector3(1, 1, 1)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_extraction"]
+albedo_color = Color(0.8, 0.65, 0.2, 1)
+
+[node name="Dungeon" type="Node3D"]
+script = ExtResource("1")
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="Label" type="Label" parent="UI"]
+offset_left = 40.0
+offset_top = 40.0
+offset_right = 500.0
+offset_bottom = 80.0
+text = "DUNGEON — WASD to move, walk to the gold block and press E to extract back to town"
+
+[node name="Floor" type="MeshInstance3D" parent="."]
+mesh = SubResource("PlaneMesh_floor")
+surface_material_override/0 = SubResource("StandardMaterial3D_floor")
+
+[node name="ExtractionPoint" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+mesh = SubResource("BoxMesh_extraction")
+surface_material_override/0 = SubResource("StandardMaterial3D_extraction")
+
+[node name="SunLight" type="DirectionalLight3D" parent="."]
+rotation_degrees = Vector3(-50, -30, 0)
+light_color = Color(0.75, 0.82, 1, 1)
+light_energy = 0.6
+shadow_enabled = true

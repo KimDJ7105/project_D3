@@ -7,6 +7,12 @@ extends Node
 ## The player node is created once and reparented into each new scene on
 ## switch (not recreated), so its position/state carries over.
 
+## Referenced via preload (not the bare `Player` class_name) so type
+## resolution doesn't depend on Godot's global script class cache being
+## warm — that cache is only rebuilt by an editor project scan, and an
+## autoload failing to parse takes the whole game down with it.
+const PlayerScript := preload("res://scripts/entities/Player.gd")
+
 enum GameState { TOWN, DUNGEON }
 
 const TOWN_SCENE := "res://scenes/town/Town.tscn"
@@ -15,16 +21,19 @@ const PLAYER_SCENE := "res://scenes/entities/Player.tscn"
 
 var current_state: GameState = GameState.TOWN
 var scene_container: Node = null
-var player: Node3D = null
+var player: PlayerScript = null
+var in_combat: bool = false
 
 
 func register_scene_container(container: Node) -> void:
 	scene_container = container
 	if player == null:
-		player = load(PLAYER_SCENE).instantiate()
+		player = load(PLAYER_SCENE).instantiate() as PlayerScript
 
 
 func goto_town() -> void:
+	if in_combat:
+		end_combat()
 	_change_scene(TOWN_SCENE, GameState.TOWN)
 
 
@@ -44,3 +53,18 @@ func _change_scene(path: String, state: GameState) -> void:
 	scene_container.add_child(new_scene)
 	new_scene.add_child(player)
 	current_state = state
+
+
+## Temporary stand-in for the real encounter trigger (field contact with an
+## enemy — see docs/02_dungeon_town_structure.md). Only switches player
+## movement mode for now; no actual grid/turn/combat systems exist yet.
+func start_combat() -> void:
+	in_combat = true
+	if player:
+		player.enter_grid_mode()
+
+
+func end_combat() -> void:
+	in_combat = false
+	if player:
+		player.enter_free_mode()

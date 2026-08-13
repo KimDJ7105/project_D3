@@ -1,6 +1,8 @@
-[gd_scene load_steps=6 format=3 uid="uid://e8631su6xwf3"]
+[gd_scene load_steps=7 format=3 uid="uid://e8631su6xwf3"]
 
 [ext_resource type="Script" path="res://scenes/dungeon/Dungeon.gd" id="1"]
+[ext_resource type="Script" path="res://scenes/dungeon/GridOverlay.gd" id="2"]
+[ext_resource type="Texture2D" path="res://assets/sprites/skeleton_test.png" id="3"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_floor"]
 size = Vector2(20, 20)
@@ -25,7 +27,7 @@ offset_left = 40.0
 offset_top = 40.0
 offset_right = 500.0
 offset_bottom = 80.0
-text = "DUNGEON — WASD to move, walk to the gold block and press E to extract back to town"
+text = "DUNGEON — WASD to move, walk to the gold block and press E to extract back to town (Q: test grid mode)"
 
 [node name="Floor" type="MeshInstance3D" parent="."]
 mesh = SubResource("PlaneMesh_floor")
@@ -41,3 +43,14 @@ rotation_degrees = Vector3(-50, -30, 0)
 light_color = Color(0.75, 0.82, 1, 1)
 light_energy = 0.6
 shadow_enabled = true
+
+[node name="GridOverlay" type="MeshInstance3D" parent="."]
+visible = false
+script = ExtResource("2")
+
+[node name="Enemy" type="Sprite3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 0, 3)
+billboard = 2
+texture_filter = 0
+pixel_size = 0.021
+texture = ExtResource("3")

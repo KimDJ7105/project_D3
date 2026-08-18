@@ -158,6 +158,11 @@ func _update_label() -> void:
 	if _enemy.state == MonsterScript.State.DEAD and not _enemy.dropped_loot.is_empty():
 		_label.text = "DUNGEON — the skeleton's corpse has loot. Walk up and press E to loot it."
 	elif GameManager.in_combat:
-		_label.text = "GRID COMBAT MODE (test) — click a cell to move, E to attack, drag a throwable item onto a tile to throw it, Q to flee"
+		var player = GameManager.player
+		_label.text = (
+			"GRID COMBAT MODE (test) — click a cell to move, E to attack, drag a throwable item onto a tile to throw it, Q to flee\n"
+			+ "Player HP: %d/%d   |   Skeleton HP: %d/%d   |   Turn: %s"
+			% [player.current_hp, player.stats.vitality, _enemy.current_hp, _enemy.stats.vitality, _current_turn_id]
+		)
 	else:
 		_label.text = "DUNGEON — WASD to move, walk to the gold block and press E to extract back to town (Q: test grid mode)"

@@ -25,9 +25,11 @@ albedo_color = Color(0.8, 0.65, 0.2, 1)
 script = ExtResource("7")
 item_id = "bone_fragment"
 display_name = "Bone Fragment"
-description = "A brittle fragment of bone. Placeholder loot item."
+description = "A brittle fragment of bone. Placeholder loot item. Sharp enough to throw."
 stackable = true
 max_stack = 99
+throwable = true
+throw_damage = 5
 stat_modifiers = {}
 
 [sub_resource type="Resource" id="Stats_skeleton"]

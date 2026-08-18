@@ -6,12 +6,15 @@ extends Node3D
 ##
 ## E (interact) is context-sensitive: attack an adjacent living enemy on
 ## your turn, loot an adjacent dead one, or extract at the gold block.
+## Dragging a throwable inventory item onto a grid tile throws it there
+## instead (see InventoryPanel.item_throw_requested).
 ## No real enemy AI exists — on its turn the enemy always attacks the
 ## player (the only behavior it has), see docs/05_decisions_log.md.
 
 const MonsterScript := preload("res://scripts/entities/Monster.gd")
 const TurnQueueScript := preload("res://scripts/systems/TurnQueue.gd")
 const CombatFormulasScript := preload("res://scripts/systems/CombatFormulas.gd")
+const GridScript := preload("res://scripts/systems/Grid.gd")
 
 const INTERACT_RANGE := 1.5
 const ENCOUNTER_RANGE := 2.5
@@ -26,6 +29,8 @@ var _current_turn_id: String = ""
 
 func _ready() -> void:
 	_enemy.died.connect(_on_enemy_died)
+	var inventory_panel = GameManager.player.get_node("InventoryPanel")
+	inventory_panel.item_throw_requested.connect(_on_item_thrown)
 
 func _process(_delta: float) -> void:
 	if GameManager.in_combat:
@@ -85,21 +90,40 @@ func _do_attack() -> void:
 	var player = GameManager.player
 	var damage: int = CombatFormulasScript.basic_attack_damage(player.stats)
 	_enemy.take_damage(damage)
-	if _enemy.state == MonsterScript.State.ALIVE:
-		# Consume the player's own turn first — _current_turn_id is still
-		# "player" at this point (advance() hasn't run since _enter_combat()
-		# or the last attack), so the loop below would otherwise never run.
-		_current_turn_id = _turn_queue.advance()
-		# No enemy AI — its only behavior is "attack the player" — but it
-		# may get multiple CT cycles in a row if it's faster, so run that
-		# behavior every time the queue lands on it, until it's the
-		# player's turn again.
-		while _current_turn_id != PLAYER_ID:
-			if _current_turn_id == _enemy.data.monster_id:
-				if _enemy_attack():
-					return  # player was defeated; combat already ended and scene changed
-			_current_turn_id = _turn_queue.advance()
+	_advance_past_enemy_turn()
 	_update_label()
+
+## Dragging a throwable item from the inventory onto a grid tile during
+## combat calls this (via InventoryPanel's item_throw_requested signal).
+## The item is spent and the turn passes regardless of whether it actually
+## hit anything — missing still costs you the item and the turn, same as a
+## real throw would. See docs/10_inventory_system.md "전투 중 투척".
+func _on_item_thrown(item: Resource, cell: Vector2i) -> void:
+	if not (GameManager.in_combat and _current_turn_id == PLAYER_ID):
+		return
+	GameManager.player.inventory.remove_item(item, 1)
+	if _enemy.state == MonsterScript.State.ALIVE:
+		var enemy_cell: Vector2i = GridScript.world_to_cell(_enemy.global_position)
+		if enemy_cell == cell:
+			_enemy.take_damage(item.throw_damage)
+	_advance_past_enemy_turn()
+	_update_label()
+
+## Shared by _do_attack() and _on_item_thrown(): consumes the player's own
+## turn, then runs the enemy's only behavior ("attack the player") for
+## however many CT cycles it gets, until control returns to the player.
+func _advance_past_enemy_turn() -> void:
+	if _enemy.state != MonsterScript.State.ALIVE:
+		return
+	# _current_turn_id is still "player" at this point (advance() hasn't run
+	# since _enter_combat() or the last action) — consume it first, or the
+	# loop below would never run.
+	_current_turn_id = _turn_queue.advance()
+	while _current_turn_id != PLAYER_ID:
+		if _current_turn_id == _enemy.data.monster_id:
+			if _enemy_attack():
+				return  # player was defeated; combat already ended and scene changed
+		_current_turn_id = _turn_queue.advance()
 
 ## Returns true if this attack defeated the player — caller must stop
 ## touching combat state immediately afterward, since _handle_player_defeat
@@ -134,6 +158,6 @@ func _update_label() -> void:
 	if _enemy.state == MonsterScript.State.DEAD and not _enemy.dropped_loot.is_empty():
 		_label.text = "DUNGEON — the skeleton's corpse has loot. Walk up and press E to loot it."
 	elif GameManager.in_combat:
-		_label.text = "GRID COMBAT MODE (test) — click a cell to move, press E next to the enemy to attack, Q to flee"
+		_label.text = "GRID COMBAT MODE (test) — click a cell to move, E to attack, drag a throwable item onto a tile to throw it, Q to flee"
 	else:
 		_label.text = "DUNGEON — WASD to move, walk to the gold block and press E to extract back to town (Q: test grid mode)"

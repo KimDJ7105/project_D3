@@ -12,6 +12,13 @@ class_name ItemData
 @export var stackable: bool = true
 @export var max_stack: int = 99
 
+## Whether this item can be dragged from the inventory onto a combat grid
+## tile to throw it (see docs/10_inventory_system.md "전투 중 투척"). No
+## real skill/effect system exists yet — throw_damage is a flat placeholder
+## number, same spirit as CombatFormulas.basic_attack_damage().
+@export var throwable: bool = false
+@export var throw_damage: int = 5
+
 ## For equipment-type items: stat_name -> bonus. Empty for non-equipment.
 ## Feeds into the `equipment_modifier` argument of
 ## CombatFormulas.effective_speed and similar future stat calculations —

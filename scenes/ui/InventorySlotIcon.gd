@@ -12,13 +12,15 @@ const PLACEHOLDER_COLOR := Color(0.85, 0.8, 0.7)  # bone-ish tan, generic placeh
 @onready var _qty_label: Label = $QtyLabel
 
 var slot_id: int = -1
+var item: Resource
 var _dragging := false
 
 func _ready() -> void:
 	custom_minimum_size = ICON_SIZE
 	size = ICON_SIZE
 
-func set_item(item: Resource, quantity: int) -> void:
+func set_item(new_item: Resource, quantity: int) -> void:
+	item = new_item
 	var visual: Control
 	if item.icon:
 		var tex_rect := TextureRect.new()

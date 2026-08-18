@@ -6,10 +6,14 @@ extends Node3D
 
 const TownFacilityScript := preload("res://scenes/town/TownFacility.gd")
 const FacilityRosterScript := preload("res://scripts/systems/FacilityRoster.gd")
+const NPCDataScript := preload("res://scripts/data/NPCData.gd")
 
 const INTERACT_RANGE := 1.5
 
 @onready var _dialogue = $DialogueBox
+
+func _ready() -> void:
+	_dialogue.npc_selected.connect(_on_npc_selected)
 
 func _input(event: InputEvent) -> void:
 	if not event.is_action_pressed("interact"):
@@ -30,9 +34,8 @@ func _input(event: InputEvent) -> void:
 
 func _enter_facility(facility: TownFacilityScript) -> void:
 	var present := FacilityRosterScript.resolve_present_npcs(facility.candidates)
-	if present.is_empty():
-		_dialogue.show_empty(facility.display_name)
-		return
-	var npc = present[0]
+	_dialogue.show_roster(present, facility.display_name)
+
+func _on_npc_selected(npc: NPCDataScript) -> void:
 	RelationshipManager.register_npc(npc.npc_id, npc.faction_id)
-	_dialogue.show_npc(npc)
+	_dialogue.show_greeting(npc)

@@ -1,8 +1,12 @@
-[gd_scene load_steps=7 format=3 uid="uid://e8631su6xwf3"]
+[gd_scene load_steps=13 format=3 uid="uid://e8631su6xwf3"]
 
 [ext_resource type="Script" path="res://scenes/dungeon/Dungeon.gd" id="1"]
 [ext_resource type="Script" path="res://scenes/dungeon/GridOverlay.gd" id="2"]
 [ext_resource type="Texture2D" path="res://assets/sprites/skeleton_test.png" id="3"]
+[ext_resource type="Script" path="res://scripts/entities/Monster.gd" id="4"]
+[ext_resource type="Script" path="res://scripts/data/MonsterData.gd" id="5"]
+[ext_resource type="Script" path="res://scripts/data/Stats.gd" id="6"]
+[ext_resource type="Script" path="res://scripts/data/ItemData.gd" id="7"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_floor"]
 size = Vector2(20, 20)
@@ -16,6 +20,38 @@ size = Vector3(1, 1, 1)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_extraction"]
 albedo_color = Color(0.8, 0.65, 0.2, 1)
+
+[sub_resource type="Resource" id="ItemData_bone"]
+script = ExtResource("7")
+item_id = "bone_fragment"
+display_name = "Bone Fragment"
+description = "A brittle fragment of bone. Placeholder loot item."
+stackable = true
+max_stack = 99
+stat_modifiers = {}
+
+[sub_resource type="Resource" id="Stats_skeleton"]
+script = ExtResource("6")
+vitality = 15
+strength = 5
+skill = 8
+intelligence = 5
+faith = 5
+mystery = 5
+speed = 8
+
+[sub_resource type="Resource" id="MonsterData_skeleton"]
+script = ExtResource("5")
+monster_id = "skeleton_warrior"
+display_name = "Skeleton Warrior"
+sprite = ExtResource("3")
+base_stats = SubResource("Stats_skeleton")
+loot_table = [{
+"item": SubResource("ItemData_bone"),
+"chance": 1.0,
+"min_qty": 1,
+"max_qty": 3
+}]
 
 [node name="Dungeon" type="Node3D"]
 script = ExtResource("1")
@@ -48,9 +84,12 @@ shadow_enabled = true
 visible = false
 script = ExtResource("2")
 
-[node name="Enemy" type="Sprite3D" parent="."]
+[node name="Enemy" type="Node3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 0, 3)
+script = ExtResource("4")
+data = SubResource("MonsterData_skeleton")
+
+[node name="Sprite3D" type="Sprite3D" parent="Enemy"]
 billboard = 2
 texture_filter = 0
 pixel_size = 0.021
-texture = ExtResource("3")

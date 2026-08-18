@@ -23,3 +23,11 @@ static func skill_speed_bonus(skill: int) -> int:
 ## 실질 속도 = 기본 속도 스탯 + 기량 구간별 보너스 + 장비 보정
 static func effective_speed(stats: StatsScript, equipment_modifier: int = 0) -> int:
 	return stats.speed + skill_speed_bonus(stats.skill) + equipment_modifier
+
+
+## TODO: pure placeholder — no skill/technique data exists yet (damage/
+## range/effects per docs/06_skill_style_system.md). This only validates
+## that the combat loop itself (attack -> damage -> death) works; replace
+## with real skill-based damage once that system is designed.
+static func basic_attack_damage(attacker_stats: StatsScript) -> int:
+	return max(1, attacker_stats.strength)

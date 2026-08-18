@@ -13,11 +13,16 @@ class_name Inventory
 
 signal contents_changed
 
-## TODO: placeholder value, no inventory-size decision has been made yet.
+## TODO: placeholder value — capacity is meant to become weight-based, not
+## slot-count-based (see docs/10_inventory_system.md), not switched over yet.
 @export var capacity: int = 20
 
-## Each entry: {"item": ItemData, "quantity": int}
+## Each entry: {"slot_id": int, "item": ItemData, "quantity": int}. slot_id
+## is a stable identity for this particular stack (array index isn't —
+## it shifts as slots are added/removed) — a freeform-placement UI keys its
+## per-item screen position off this rather than array position.
 var slots: Array = []
+var _next_slot_id: int = 0
 
 
 func add_item(item: Resource, quantity: int = 1) -> bool:
@@ -41,7 +46,8 @@ func add_item(item: Resource, quantity: int = 1) -> bool:
 			contents_changed.emit()
 			return false
 		var take: int = remaining if not item.stackable else min(remaining, item.max_stack)
-		slots.append({"item": item, "quantity": take})
+		slots.append({"slot_id": _next_slot_id, "item": item, "quantity": take})
+		_next_slot_id += 1
 		remaining -= take
 	contents_changed.emit()
 	return true

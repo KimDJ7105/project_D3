@@ -11,11 +11,16 @@ offset_top = 40.0
 offset_right = 1240.0
 offset_bottom = 400.0
 
-[node name="ItemList" type="Label" parent="Panel"]
-offset_left = 12.0
-offset_top = 12.0
-offset_right = 328.0
-offset_bottom = 348.0
-text = "Inventory (I to toggle)
-(empty)"
-autowrap_mode = 2
+[node name="Title" type="Label" parent="Panel"]
+offset_left = 8.0
+offset_top = 4.0
+offset_right = 332.0
+offset_bottom = 24.0
+text = "Inventory (I to toggle, drag items freely)"
+
+[node name="Bag" type="Control" parent="Panel"]
+clip_contents = true
+offset_left = 4.0
+offset_top = 28.0
+offset_right = 336.0
+offset_bottom = 352.0

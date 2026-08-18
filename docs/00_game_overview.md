@@ -55,3 +55,4 @@ last_updated: 2026-08-10
 - [[07_progression_death_system]] — 진행 구조 및 사망/추출 시스템
 - [[08_world_and_factions]] — 세계관: 던전의 기원과 세력들
 - [[09_aseprite_pixel_pipeline]] — Aseprite 픽셀아트 파이프라인 및 명령어 참고
+- [[10_inventory_system]] — 인벤토리 시스템(자유 배치, 무게 제한, 투척, 인접 위험)

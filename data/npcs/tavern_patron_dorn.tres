@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="NPCData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/NPCData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+npc_id = "tavern_patron_dorn"
+display_name = "단골 손님 돈"
+faction_id = ""
+is_named = true
+home_facility_id = "tavern"
+appearance_chance = 0.4
+greeting = "...(말없이 술잔만 기울인다)"

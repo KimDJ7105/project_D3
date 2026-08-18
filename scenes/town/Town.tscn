@@ -1,6 +1,10 @@
-[gd_scene load_steps=6 format=3 uid="uid://c8m1n2q3r4s5t"]
+[gd_scene load_steps=11 format=3 uid="uid://c8m1n2q3r4s5t"]
 
 [ext_resource type="Script" path="res://scenes/town/Town.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/ui/DialogueBox.tscn" id="2"]
+[ext_resource type="Script" path="res://scenes/town/TownFacility.gd" id="3"]
+[ext_resource type="Resource" path="res://data/npcs/tavern_keeper.tres" id="4"]
+[ext_resource type="Resource" path="res://data/npcs/tavern_patron_dorn.tres" id="5"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_floor"]
 size = Vector2(20, 20)
@@ -15,6 +19,9 @@ size = Vector3(1, 1, 1)
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_entrance"]
 albedo_color = Color(0.25, 0.1, 0.35, 1)
 
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_tavern"]
+albedo_color = Color(0.55, 0.35, 0.1, 1)
+
 [node name="Town" type="Node3D"]
 script = ExtResource("1")
 
@@ -25,7 +32,9 @@ offset_left = 40.0
 offset_top = 40.0
 offset_right = 500.0
 offset_bottom = 80.0
-text = "TOWN — WASD to move, walk to the purple block and press E to head into the dungeon"
+text = "TOWN — WASD to move, purple block + E: dungeon, brown block + E: tavern"
+
+[node name="DialogueBox" parent="." instance=ExtResource("2")]
 
 [node name="Floor" type="MeshInstance3D" parent="."]
 mesh = SubResource("PlaneMesh_floor")
@@ -35,6 +44,15 @@ surface_material_override/0 = SubResource("StandardMaterial3D_floor")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0.5, -6)
 mesh = SubResource("BoxMesh_entrance")
 surface_material_override/0 = SubResource("StandardMaterial3D_entrance")
+
+[node name="Tavern" type="MeshInstance3D" parent="." groups=["town_facility"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6, 0.5, -6)
+mesh = SubResource("BoxMesh_entrance")
+surface_material_override/0 = SubResource("StandardMaterial3D_tavern")
+script = ExtResource("3")
+facility_id = "tavern"
+display_name = "선술집"
+candidates = [ExtResource("4"), ExtResource("5")]
 
 [node name="SunLight" type="DirectionalLight3D" parent="."]
 rotation_degrees = Vector3(-50, -30, 0)

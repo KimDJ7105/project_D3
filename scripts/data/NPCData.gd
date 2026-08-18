@@ -20,3 +20,10 @@ class_name NPCData
 ## trait_name -> value. Exact trait list/value range not decided yet
 ## (docs/01_relationship_system.md "개인 특성" section) — left open on purpose.
 @export var traits: Dictionary = {}
+
+## Town facility roster fields — see docs/02_dungeon_town_structure.md "마을".
+## v1 scope: only the random tier is implemented (see FacilityRoster.gd);
+## quest/condition tiers are stubbed to always pass through to random.
+@export var home_facility_id: String = ""  # matches TownFacility.facility_id
+@export_range(0.0, 1.0) var appearance_chance: float = 0.5  # random-tier "단골" chance — placeholder, balancing TBD
+@export_multiline var greeting: String = ""  # stand-in for a real dialogue system, which doesn't exist yet

@@ -23,9 +23,11 @@ var inventory: InventoryScript = InventoryScript.new()
 var current_hp: int
 
 @onready var _camera: Camera3D = $Camera3D
+@onready var _inventory_panel: CanvasLayer = $InventoryPanel
 
 func _ready() -> void:
 	current_hp = stats.vitality
+	_inventory_panel.bind(inventory)
 
 func take_damage(amount: int) -> void:
 	current_hp = max(0, current_hp - amount)

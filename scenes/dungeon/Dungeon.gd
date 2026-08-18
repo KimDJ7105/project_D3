@@ -6,8 +6,8 @@ extends Node3D
 ##
 ## E (interact) is context-sensitive: attack an adjacent living enemy on
 ## your turn, loot an adjacent dead one, or extract at the gold block.
-## No enemy AI exists — the enemy's turn is an instant no-op pass straight
-## back to the player (see docs/05_decisions_log.md).
+## No real enemy AI exists — on its turn the enemy always attacks the
+## player (the only behavior it has), see docs/05_decisions_log.md.
 
 const MonsterScript := preload("res://scripts/entities/Monster.gd")
 const TurnQueueScript := preload("res://scripts/systems/TurnQueue.gd")
@@ -86,11 +86,40 @@ func _do_attack() -> void:
 	var damage: int = CombatFormulasScript.basic_attack_damage(player.stats)
 	_enemy.take_damage(damage)
 	if _enemy.state == MonsterScript.State.ALIVE:
-		# No enemy AI — pass through the enemy's turn instantly, however
-		# many CT cycles that takes, until it's the player's turn again.
+		# Consume the player's own turn first — _current_turn_id is still
+		# "player" at this point (advance() hasn't run since _enter_combat()
+		# or the last attack), so the loop below would otherwise never run.
+		_current_turn_id = _turn_queue.advance()
+		# No enemy AI — its only behavior is "attack the player" — but it
+		# may get multiple CT cycles in a row if it's faster, so run that
+		# behavior every time the queue lands on it, until it's the
+		# player's turn again.
 		while _current_turn_id != PLAYER_ID:
+			if _current_turn_id == _enemy.data.monster_id:
+				if _enemy_attack():
+					return  # player was defeated; combat already ended and scene changed
 			_current_turn_id = _turn_queue.advance()
 	_update_label()
+
+## Returns true if this attack defeated the player — caller must stop
+## touching combat state immediately afterward, since _handle_player_defeat
+## already exits combat and switches scenes.
+func _enemy_attack() -> bool:
+	var player = GameManager.player
+	var damage: int = CombatFormulasScript.basic_attack_damage(_enemy.stats)
+	player.take_damage(damage)
+	if player.current_hp <= 0:
+		_handle_player_defeat()
+		return true
+	return false
+
+## Placeholder "survive and retreat" outcome — real death/extraction
+## consequences belong to the "세계 충돌" system
+## (docs/07_progression_death_system.md), which isn't built yet.
+func _handle_player_defeat() -> void:
+	_exit_combat()
+	GameManager.player.heal_to_full()
+	GameManager.goto_town()
 
 func _do_loot() -> void:
 	var loot: Array = _enemy.loot()
@@ -105,6 +134,6 @@ func _update_label() -> void:
 	if _enemy.state == MonsterScript.State.DEAD and not _enemy.dropped_loot.is_empty():
 		_label.text = "DUNGEON — the skeleton's corpse has loot. Walk up and press E to loot it."
 	elif GameManager.in_combat:
-		_label.text = "GRID COMBAT MODE (test) — press E next to the enemy to attack, Q to flee"
+		_label.text = "GRID COMBAT MODE (test) — click a cell to move, press E next to the enemy to attack, Q to flee"
 	else:
 		_label.text = "DUNGEON — WASD to move, walk to the gold block and press E to extract back to town (Q: test grid mode)"

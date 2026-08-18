@@ -8,9 +8,43 @@ const GridScript := preload("res://scripts/systems/Grid.gd")
 @export var half_extent: float = 10.0  # covers -half_extent..+half_extent on both axes
 @export var line_color: Color = Color(0.3, 0.9, 1.0, 0.6)
 @export var line_y: float = 0.01  # lifted slightly above the floor to avoid z-fighting
+@export var highlight_color: Color = Color(1, 1, 0.3, 0.35)
+
+var _highlight: MeshInstance3D
 
 func _ready() -> void:
 	_build_mesh()
+	_build_highlight()
+
+func _build_highlight() -> void:
+	var quad := PlaneMesh.new()
+	quad.size = Vector2(GridScript.CELL_SIZE, GridScript.CELL_SIZE) * 0.9  # slightly smaller than a cell so grid lines stay visible around it
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.albedo_color = highlight_color
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_highlight = MeshInstance3D.new()
+	_highlight.mesh = quad
+	_highlight.material_override = material
+	_highlight.visible = false
+	add_child(_highlight)
+
+## Shows which cell a click would move the player to (see Player.gd's
+## click-to-move). Uses whatever camera is currently active rather than a
+## direct Player reference, so this stays decoupled from Player entirely.
+func _process(_delta: float) -> void:
+	if not visible:
+		return
+	var camera := get_viewport().get_camera_3d()
+	if camera == null:
+		_highlight.visible = false
+		return
+	var cell = GridScript.raycast_to_cell(camera, get_viewport().get_mouse_position(), line_y)
+	if cell == null:
+		_highlight.visible = false
+		return
+	_highlight.position = GridScript.cell_to_world(cell, line_y + 0.001)
+	_highlight.visible = true
 
 func _build_mesh() -> void:
 	var cell_size: float = GridScript.CELL_SIZE

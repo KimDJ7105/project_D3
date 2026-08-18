@@ -12,3 +12,17 @@ static func world_to_cell(world_pos: Vector3) -> Vector2i:
 
 static func cell_to_world(cell: Vector2i, y: float = 0.0) -> Vector3:
 	return Vector3(cell.x * CELL_SIZE, y, cell.y * CELL_SIZE)
+
+## Raycasts from a screen position through `camera` onto the floor plane
+## (y = floor_y) and returns the grid cell there, or null if the ray never
+## hits the floor plane (camera facing away from it, etc.). Shared by
+## Player (click-to-move) and GridOverlay (hover highlight) so both agree
+## on exactly the same math.
+static func raycast_to_cell(camera: Camera3D, screen_pos: Vector2, floor_y: float = 0.0) -> Variant:
+	var from: Vector3 = camera.project_ray_origin(screen_pos)
+	var dir: Vector3 = camera.project_ray_normal(screen_pos)
+	var floor_plane := Plane(Vector3.UP, floor_y)
+	var hit = floor_plane.intersects_ray(from, dir)
+	if hit == null:
+		return null
+	return world_to_cell(hit)

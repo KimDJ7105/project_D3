@@ -8,7 +8,8 @@ extends Node3D
 ## "전투 중 이동과 스테미나", 2026-08-18). A turn no longer ends
 ## automatically after one action — the player explicitly ends their turn
 ## (F / "end_turn") once they're done moving/acting within their stamina
-## budget.
+## budget. Movement can be freely undone (R / "undo_movement") until the
+## player attacks or throws something — see Player.mark_acted().
 ##
 ## E (interact) is context-sensitive: attack a living enemy in range on
 ## your turn, loot an adjacent dead one, or extract at the gold block.
@@ -52,6 +53,8 @@ func _input(event: InputEvent) -> void:
 		_on_interact()
 	elif event.is_action_pressed("end_turn"):
 		_end_turn()
+	elif event.is_action_pressed("undo_movement"):
+		_undo_movement()
 	elif event.is_action_pressed("debug_toggle_combat"):
 		if GameManager.in_combat:
 			_exit_combat()
@@ -96,14 +99,26 @@ func _exit_combat() -> void:
 
 ## Costs stamina and requires being in range — no more free unlimited
 ## attacks regardless of position now that positioning actually matters
-## (docs/03_combat_system.md).
+## (docs/03_combat_system.md). Locks out undo_movement() for the rest of
+## the turn once it lands — see Player.mark_acted().
 func _do_attack() -> void:
 	var player = GameManager.player
 	if player.current_stamina < CombatFormulasScript.BASIC_ATTACK_STAMINA_COST:
 		return
 	var damage: int = CombatFormulasScript.basic_attack_damage(player.stats)
 	player.current_stamina -= CombatFormulasScript.BASIC_ATTACK_STAMINA_COST
+	player.mark_acted()
 	_enemy.take_damage(damage)
+	_update_label()
+
+## Undoes all movement done this turn — resets position and stamina back to
+## how they were at the start of the turn. Free (costs nothing, doesn't end
+## the turn) but only available before the player has attacked or thrown
+## anything this turn — see Player.can_undo_movement().
+func _undo_movement() -> void:
+	if not (GameManager.in_combat and _current_turn_id == PLAYER_ID):
+		return
+	GameManager.player.undo_movement()
 	_update_label()
 
 ## Ends the player's turn: no more actions from them until it cycles back
@@ -133,6 +148,7 @@ func _on_item_thrown(item: Resource, target_point: Vector3) -> void:
 	if TargetingScript.flat_distance(player.global_position, target_point) > item.throw_range:
 		return
 	player.current_stamina -= CombatFormulasScript.BASIC_ATTACK_STAMINA_COST
+	player.mark_acted()
 	player.inventory.remove_item(item, 1)
 	if _enemy.state == MonsterScript.State.ALIVE:
 		if TargetingScript.flat_distance(target_point, _enemy.global_position) <= item.effect_radius:
@@ -189,7 +205,7 @@ func _update_label() -> void:
 	elif GameManager.in_combat:
 		var player = GameManager.player
 		_label.text = (
-			"COMBAT (test) — click to move (stamina-limited), E to attack, drag a throwable item onto the world to throw it, F to end turn, Q to flee\n"
+			"COMBAT (test) — click to move (stamina-limited), E to attack, drag a throwable item onto the world to throw it, R to undo movement (until you act), F to end turn, Q to flee\n"
 			+ "Player HP: %d/%d  Stamina: %d/%d   |   Skeleton HP: %d/%d   |   Turn: %s"
 			% [player.current_hp, player.stats.vitality, roundi(player.current_stamina), player.stats.stamina, _enemy.current_hp, _enemy.stats.vitality, _current_turn_id]
 		)

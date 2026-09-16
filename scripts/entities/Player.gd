@@ -31,6 +31,14 @@ var current_stamina: float
 ## works while this is true; see start_turn()/end_turn().
 var is_my_turn: bool = false
 
+## Movement can be freely undone (position + stamina both reset to how they
+## were at the start of this turn) up until the player attacks or throws —
+## once that happens undo locks for the rest of the turn, so "move, attack,
+## then reposition risk-free" isn't a thing. See mark_acted()/undo_movement()
+## and docs/03_combat_system.md.
+var _turn_start_position: Vector3 = Vector3.ZERO
+var _has_acted_this_turn: bool = false
+
 @onready var _camera: Camera3D = $Camera3D
 @onready var _inventory_panel: CanvasLayer = $InventoryPanel
 @onready var _hud: CanvasLayer = $PlayerHUD
@@ -58,9 +66,29 @@ func heal_to_full() -> void:
 func start_turn() -> void:
 	is_my_turn = true
 	current_stamina = stats.stamina
+	_turn_start_position = position
+	_has_acted_this_turn = false
 
 func end_turn() -> void:
 	is_my_turn = false
+
+## Called by the combat scene once an attack/throw actually lands (not on a
+## rejected attempt, e.g. insufficient stamina or out of range) — permanently
+## locks out undo_movement() for the rest of this turn.
+func mark_acted() -> void:
+	_has_acted_this_turn = true
+
+func can_undo_movement() -> bool:
+	return is_my_turn and not _has_acted_this_turn
+
+## Resets position and stamina back to how they were at the start of this
+## turn, as if no movement happened yet. No-op if an attack/throw has
+## already happened this turn (see can_undo_movement()).
+func undo_movement() -> void:
+	if not can_undo_movement():
+		return
+	position = _turn_start_position
+	current_stamina = stats.stamina
 
 func _process(delta: float) -> void:
 	if movement_mode == MovementMode.FREE:

@@ -6,6 +6,10 @@ class_name Player
 ## movement (no grid), but click-to-move is turn-gated and limited by
 ## remaining stamina — see docs/03_combat_system.md "전투 중 이동과
 ## 스테미나" (2026-08-18, replaced the old grid-based click-to-move).
+##
+## Left-click normally moves. Pressing a skill key arms it
+## (start_aiming_skill()) so the next left-click targets it instead —
+## see pending_skill_index/skill_aim_requested. Right-click cancels aim.
 
 ## Referenced via preload rather than the bare class_name — see the note on
 ## PlayerScript in scripts/core/GameManager.gd for why.
@@ -20,6 +24,12 @@ enum MovementMode { FREE, COMBAT }
 const SPEED := 4.0  # free-roam movement units/sec — unrelated to the 속도 combat stat below
 
 signal died
+
+## Fired when the player has an equipped skill "armed" (see
+## start_aiming_skill()) and then left-clicks a world point to confirm the
+## target — the combat scene (Dungeon.gd) resolves what that hits, same
+## split as InventoryPanel.item_throw_requested.
+signal skill_aim_requested(index: int, target: Vector3)
 
 var movement_mode: MovementMode = MovementMode.FREE
 var stats: StatsScript = StatsScript.new()
@@ -47,6 +57,14 @@ var is_my_turn: bool = false
 ## and docs/03_combat_system.md.
 var _turn_start_position: Vector3 = Vector3.ZERO
 var _has_acted_this_turn: bool = false
+
+## >= 0 while a skill is "armed" and waiting for the player to click a
+## world point/target to confirm it — see start_aiming_skill(). While
+## armed, left-click stops meaning "move here" and means "use this skill
+## here/on this" instead (docs/03_combat_system.md "스킬 범위 구조" — this
+## is what actually lets a click express a target/aim point, instead of
+## a skill just auto-resolving against whatever's nearby).
+var pending_skill_index: int = -1
 
 @onready var _camera: Camera3D = $Camera3D
 @onready var _inventory_panel: CanvasLayer = $InventoryPanel
@@ -90,6 +108,18 @@ func mark_acted() -> void:
 func can_undo_movement() -> bool:
 	return is_my_turn and not _has_acted_this_turn
 
+## Arms equipped_skills[index] — the next left-click (or right-click to
+## cancel) resolves it instead of moving. Called by the combat scene when
+## a skill key is pressed (e.g. E, "2").
+func start_aiming_skill(index: int) -> void:
+	pending_skill_index = index
+
+func cancel_aim() -> void:
+	pending_skill_index = -1
+
+func is_aiming() -> bool:
+	return pending_skill_index >= 0
+
 ## Resets position and stamina back to how they were at the start of this
 ## turn, as if no movement happened yet. No-op if an attack/throw has
 ## already happened this turn (see can_undo_movement()).
@@ -118,10 +148,21 @@ func _process_free_movement(_delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if movement_mode != MovementMode.COMBAT or not is_my_turn:
 		return
-	if not (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
+	if not (event is InputEventMouseButton and event.pressed):
+		return
+	if is_aiming() and event.button_index == MOUSE_BUTTON_RIGHT:
+		cancel_aim()
+		return
+	if event.button_index != MOUSE_BUTTON_LEFT:
 		return
 	var target = TargetingScript.raycast_to_floor_point(_camera, event.position, position.y)
-	if target != null:
+	if target == null:
+		return
+	if is_aiming():
+		var index := pending_skill_index
+		pending_skill_index = -1
+		skill_aim_requested.emit(index, target)
+	else:
 		_move_toward(target)
 
 ## Moves as far toward `target` as remaining stamina allows (clamped, not
@@ -146,3 +187,4 @@ func enter_combat_mode() -> void:
 func enter_free_mode() -> void:
 	movement_mode = MovementMode.FREE
 	is_my_turn = false
+	pending_skill_index = -1

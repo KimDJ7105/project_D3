@@ -11,12 +11,15 @@ extends Node3D
 ## budget. Movement can be freely undone (R / "undo_movement") until the
 ## player attacks or throws something — see Player.mark_acted().
 ##
-## E (interact) uses equipped_skills[0] ("베기") on a living enemy in range
-## on your turn, or loots an adjacent dead one, or extracts at the gold
-## block. "2" ("skill_2") uses equipped_skills[1] ("강타") instead — see
-## Player.equipped_skills and CombatFormulas.skill_damage()
-## (docs/06_skill_style_system.md). No skill slot/loadout UI exists yet, so
-## these two are just hardcoded on Player for now.
+## E (interact) *arms* equipped_skills[0] ("베기") on your turn — the skill
+## doesn't fire until the next left-click picks a target point (or an
+## adjacent dead enemy: loots; or the gold block: extracts). "2" ("skill_2")
+## arms equipped_skills[1] ("강타") the same way. Right-click (or pressing
+## the same skill key again) cancels aiming. This click-to-target step is
+## what actually makes range/effect_radius testable — see
+## Player.start_aiming_skill()/skill_aim_requested and
+## CombatFormulas.skill_damage() (docs/06_skill_style_system.md). No skill
+## slot/loadout UI exists yet, so these two are just hardcoded on Player.
 ## Dragging a throwable inventory item onto the world throws it there
 ## instead (see InventoryPanel.item_throw_requested).
 ## No real enemy AI exists — on its turn the enemy always uses its one
@@ -31,6 +34,14 @@ const INTERACT_RANGE := 1.5
 const ENCOUNTER_RANGE := 2.5
 const PLAYER_ID := "player"
 
+## Single-target skills (effect_radius == 0) still need *some* click
+## tolerance around the actual enemy position — a real spatial radius
+## doesn't apply to them conceptually (docs/03_combat_system.md "스킬 범위
+## 구조": 0 means "the target itself", not a tiny AoE), but a mouse click
+## on a 3D floor raycast is never going to land on the exact same point.
+## This is a targeting/input-precision constant, not a gameplay radius.
+const SINGLE_TARGET_AIM_TOLERANCE := 1.0
+
 @onready var _label: Label = $UI/Label
 @onready var _movement_indicator: MeshInstance3D = $MovementRangeIndicator
 @onready var _enemy: MonsterScript = $Enemy
@@ -40,8 +51,10 @@ var _current_turn_id: String = ""
 
 func _ready() -> void:
 	_enemy.died.connect(_on_enemy_died)
-	var inventory_panel = GameManager.player.get_node("InventoryPanel")
+	var player = GameManager.player
+	var inventory_panel = player.get_node("InventoryPanel")
 	inventory_panel.item_throw_requested.connect(_on_item_thrown)
+	player.skill_aim_requested.connect(_on_skill_aim_requested)
 
 func _process(_delta: float) -> void:
 	if GameManager.in_combat:
@@ -56,7 +69,7 @@ func _input(event: InputEvent) -> void:
 	if event.is_action_pressed("interact"):
 		_on_interact()
 	elif event.is_action_pressed("skill_2"):
-		_try_use_skill(1)
+		_arm_skill(1)
 	elif event.is_action_pressed("end_turn"):
 		_end_turn()
 	elif event.is_action_pressed("undo_movement"):
@@ -72,13 +85,27 @@ func _on_interact() -> void:
 	if player == null:
 		return
 	if GameManager.in_combat and _current_turn_id == PLAYER_ID and _enemy.state == MonsterScript.State.ALIVE:
-		_try_use_skill(0)
+		_arm_skill(0)
 		return
 	var near_enemy: bool = player.global_position.distance_to(_enemy.global_position) <= INTERACT_RANGE
 	if near_enemy and _enemy.state == MonsterScript.State.DEAD:
 		_do_loot()
 		return
 	_try_extract()
+
+## Arms equipped_skills[index] — it doesn't fire until the player
+## left-clicks a target point (Player.skill_aim_requested ->
+## _on_skill_aim_requested()). Pressing the same skill's key again while
+## it's already armed cancels it instead (toggle).
+func _arm_skill(index: int) -> void:
+	if not (GameManager.in_combat and _current_turn_id == PLAYER_ID):
+		return
+	var player = GameManager.player
+	if player.pending_skill_index == index:
+		player.cancel_aim()
+	else:
+		player.start_aiming_skill(index)
+	_update_label()
 
 func _try_extract() -> void:
 	var player: Node3D = GameManager.player
@@ -101,24 +128,32 @@ func _exit_combat() -> void:
 	_current_turn_id = ""
 	_update_label()
 
-## Uses GameManager.player.equipped_skills[index] on the enemy — checks the
-## skill's own range and stamina cost (docs/03_combat_system.md "스킬 범위
-## 구조"), rejecting silently (nothing spent) if either fails. Single-target
-## skills (effect_radius == 0) are resolved as a direct distance check
-## against the enemy itself, not a point-in-space radius. Locks out
-## undo_movement() for the rest of the turn once it lands — see
+## The target point the player clicked after arming equipped_skills[index]
+## (see _arm_skill()/Player.skill_aim_requested). Checks the skill's own
+## range and stamina cost (docs/03_combat_system.md "스킬 범위 구조"),
+## rejecting outright (nothing spent) if the aim point itself is beyond
+## range. Otherwise the skill fires regardless of whether it actually hits
+## anything — clicking too far from the enemy (but still within range) is
+## a real miss that still costs stamina, same "committing to it costs you"
+## spirit as throwing (docs/10_inventory_system.md). Locks out
+## undo_movement() for the rest of the turn once it fires — see
 ## Player.mark_acted().
-func _try_use_skill(index: int) -> void:
+func _on_skill_aim_requested(index: int, target_point: Vector3) -> void:
+	if not (GameManager.in_combat and _current_turn_id == PLAYER_ID):
+		return
 	var player = GameManager.player
 	var skill = player.equipped_skills[index]
 	if player.current_stamina < skill.stamina_cost:
 		return
-	if TargetingScript.flat_distance(player.global_position, _enemy.global_position) > skill.range:
+	if TargetingScript.flat_distance(player.global_position, target_point) > skill.range:
 		return
-	var damage: int = CombatFormulasScript.skill_damage(player.stats, skill)
 	player.current_stamina -= skill.stamina_cost
 	player.mark_acted()
-	_enemy.take_damage(damage)
+	var hit_radius: float = skill.effect_radius if skill.effect_radius > 0.0 else SINGLE_TARGET_AIM_TOLERANCE
+	if _enemy.state == MonsterScript.State.ALIVE:
+		if TargetingScript.flat_distance(target_point, _enemy.global_position) <= hit_radius:
+			var damage: int = CombatFormulasScript.skill_damage(player.stats, skill)
+			_enemy.take_damage(damage)
 	_update_label()
 
 ## Undoes all movement done this turn — resets position and stamina back to
@@ -214,8 +249,15 @@ func _update_label() -> void:
 		_label.text = "DUNGEON — the skeleton's corpse has loot. Walk up and press E to loot it."
 	elif GameManager.in_combat:
 		var player = GameManager.player
+		var aim_hint: String
+		if player.is_aiming():
+			var aimed_skill = player.equipped_skills[player.pending_skill_index]
+			aim_hint = "AIMING %s (range %.1f) — click a target, right-click/press again to cancel" % [aimed_skill.display_name, aimed_skill.range]
+		else:
+			aim_hint = "click to move (stamina-limited), E: 베기, 2: 강타"
 		_label.text = (
-			"COMBAT (test) — click to move (stamina-limited), E: 베기, 2: 강타, drag a throwable item onto the world to throw it, R to undo movement (until you act), F to end turn, Q to flee\n"
+			"COMBAT (test) — %s, drag a throwable item onto the world to throw it, R to undo movement (until you act), F to end turn, Q to flee\n"
+			% aim_hint
 			+ "Player HP: %d/%d  Stamina: %d/%d   |   Skeleton HP: %d/%d   |   Turn: %s"
 			% [player.current_hp, player.stats.vitality, roundi(player.current_stamina), player.stats.stamina, _enemy.current_hp, _enemy.stats.vitality, _current_turn_id]
 		)

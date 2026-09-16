@@ -34,13 +34,15 @@ const INTERACT_RANGE := 1.5
 const ENCOUNTER_RANGE := 2.5
 const PLAYER_ID := "player"
 
-## Single-target skills (effect_radius == 0) still need *some* click
-## tolerance around the actual enemy position — a real spatial radius
-## doesn't apply to them conceptually (docs/03_combat_system.md "스킬 범위
-## 구조": 0 means "the target itself", not a tiny AoE), but a mouse click
-## on a 3D floor raycast is never going to land on the exact same point.
-## This is a targeting/input-precision constant, not a gameplay radius.
-const SINGLE_TARGET_AIM_TOLERANCE := 1.0
+## How close a click needs to land to the enemy to count as "you selected
+## this as your target" for a single-target skill (effect_radius == 0).
+## Not a gameplay radius (docs/03_combat_system.md "스킬 범위 구조": 0 means
+## "the target itself") — just a generous target-select tolerance so this
+## isn't pixel-precise mouse aiming in a turn-based (non-FPS) game. Missing
+## with this doesn't cost anything: no valid target selected means the
+## skill never fires at all (2026-09-17 — see 결정 로그, single-target no
+## longer allowed to "whiff" against empty space the way AoE/throwing can).
+const SINGLE_TARGET_SELECT_RADIUS := 1.0
 
 @onready var _label: Label = $UI/Label
 @onready var _movement_indicator: MeshInstance3D = $MovementRangeIndicator
@@ -132,12 +134,17 @@ func _exit_combat() -> void:
 ## (see _arm_skill()/Player.skill_aim_requested). Checks the skill's own
 ## range and stamina cost (docs/03_combat_system.md "스킬 범위 구조"),
 ## rejecting outright (nothing spent) if the aim point itself is beyond
-## range. Otherwise the skill fires regardless of whether it actually hits
-## anything — clicking too far from the enemy (but still within range) is
-## a real miss that still costs stamina, same "committing to it costs you"
-## spirit as throwing (docs/10_inventory_system.md). Locks out
-## undo_movement() for the rest of the turn once it fires — see
-## Player.mark_acted().
+## range. Beyond that, single-target and AoE skills differ on purpose:
+## - **Single-target** (effect_radius == 0) needs an actual target — if
+##   the click didn't land on a live enemy (within SINGLE_TARGET_SELECT_RADIUS),
+##   nothing happens at all, no cost. This isn't a "miss": clicking empty
+##   space just never selected anything to use the skill on.
+## - **AoE** (effect_radius > 0) fires regardless of whether it actually
+##   hits anything — ground-targeted skills (zones/traps/area denial) are
+##   meant to be usable strategically at a location with no target
+##   present, not just as a punishment for imprecise aim.
+## Locks out undo_movement() for the rest of the turn once it actually
+## fires — see Player.mark_acted().
 func _on_skill_aim_requested(index: int, target_point: Vector3) -> void:
 	if not (GameManager.in_combat and _current_turn_id == PLAYER_ID):
 		return
@@ -147,13 +154,18 @@ func _on_skill_aim_requested(index: int, target_point: Vector3) -> void:
 		return
 	if TargetingScript.flat_distance(player.global_position, target_point) > skill.range:
 		return
+	var hit_radius: float = skill.effect_radius if skill.effect_radius > 0.0 else SINGLE_TARGET_SELECT_RADIUS
+	var hits_enemy: bool = (
+		_enemy.state == MonsterScript.State.ALIVE
+		and TargetingScript.flat_distance(target_point, _enemy.global_position) <= hit_radius
+	)
+	if skill.effect_radius <= 0.0 and not hits_enemy:
+		return  # single-target: no valid target under the click, nothing happens
 	player.current_stamina -= skill.stamina_cost
 	player.mark_acted()
-	var hit_radius: float = skill.effect_radius if skill.effect_radius > 0.0 else SINGLE_TARGET_AIM_TOLERANCE
-	if _enemy.state == MonsterScript.State.ALIVE:
-		if TargetingScript.flat_distance(target_point, _enemy.global_position) <= hit_radius:
-			var damage: int = CombatFormulasScript.skill_damage(player.stats, skill)
-			_enemy.take_damage(damage)
+	if hits_enemy:
+		var damage: int = CombatFormulasScript.skill_damage(player.stats, skill)
+		_enemy.take_damage(damage)
 	_update_label()
 
 ## Undoes all movement done this turn — resets position and stamina back to

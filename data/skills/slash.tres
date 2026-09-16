@@ -8,6 +8,6 @@ skill_id = "slash"
 display_name = "베기"
 scaling_stat = "strength"
 scaling_multiplier = 1.0
-range = 1.5
+range = 2.0
 effect_radius = 0.0
 stamina_cost = 20.0

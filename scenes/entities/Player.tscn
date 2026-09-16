@@ -1,12 +1,21 @@
-[gd_scene load_steps=5 format=3 uid="uid://f1g2h3i4j5k6l"]
+[gd_scene load_steps=6 format=3 uid="uid://f1g2h3i4j5k6l"]
 
 [ext_resource type="Script" path="res://scripts/entities/Player.gd" id="1"]
 [ext_resource type="Texture2D" path="res://assets/sprites/character_test.png" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/ui/InventoryPanel.tscn" id="3"]
 [ext_resource type="PackedScene" path="res://scenes/ui/PlayerHUD.tscn" id="4"]
 
-[node name="Player" type="Node3D"]
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_player"]
+radius = 0.4
+height = 1.2
+
+[node name="Player" type="CharacterBody3D"]
+motion_mode = 1
 script = ExtResource("1")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 0)
+shape = SubResource("CapsuleShape3D_player")
 
 [node name="Sprite3D" type="Sprite3D" parent="."]
 billboard = 2

@@ -57,6 +57,10 @@ func _ready() -> void:
 	var inventory_panel = player.get_node("InventoryPanel")
 	inventory_panel.item_throw_requested.connect(_on_item_thrown)
 	player.skill_aim_requested.connect(_on_skill_aim_requested)
+	# Every dungeon entry is a fresh run (docs/02_dungeon_town_structure.md
+	# "층 스킵/지름길 없음") — snap to the entrance/extraction point rather
+	# than wherever the player happened to be standing in town.
+	player.position = Vector3($ExtractionPoint.global_position.x, 0.0, $ExtractionPoint.global_position.z)
 
 func _process(_delta: float) -> void:
 	if GameManager.in_combat:

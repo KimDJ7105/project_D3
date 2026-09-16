@@ -8,9 +8,10 @@
 [ext_resource type="Script" uid="uid://guclwa75w6lb" path="res://scripts/data/Stats.gd" id="6"]
 [ext_resource type="Script" uid="uid://ch1qo5oerku3o" path="res://scripts/data/ItemData.gd" id="7"]
 [ext_resource type="Resource" path="res://data/skills/bone_strike.tres" id="8"]
+[ext_resource type="Script" path="res://scenes/dungeon/DungeonDressing.gd" id="9"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_floor"]
-size = Vector2(20, 20)
+size = Vector2(24, 24)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_floor"]
 albedo_color = Color(0.32, 0.35, 0.4, 1)
@@ -62,7 +63,7 @@ offset_left = 40.0
 offset_top = 40.0
 offset_right = 700.0
 offset_bottom = 110.0
-text = "DUNGEON — WASD to move, walk to the gold block and press E to extract back to town (Q: test combat mode)"
+text = "DUNGEON — Floor 1 (ruins) — WASD to move, walk to the gold block and press E to extract back to town (Q: test combat mode)"
 autowrap_mode = 2
 
 [node name="Floor" type="MeshInstance3D" parent="." unique_id=853485863]
@@ -71,7 +72,7 @@ mesh = SubResource("PlaneMesh_floor")
 surface_material_override/0 = SubResource("StandardMaterial3D_floor")
 
 [node name="ExtractionPoint" type="MeshInstance3D" parent="." unique_id=671674341]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 8)
 mesh = SubResource("BoxMesh_extraction")
 surface_material_override/0 = SubResource("StandardMaterial3D_extraction")
 
@@ -86,7 +87,7 @@ visible = false
 script = ExtResource("2")
 
 [node name="Enemy" type="Node3D" parent="." unique_id=1775660484]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 0, 3)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 0, -4)
 script = ExtResource("4")
 data = SubResource("MonsterData_skeleton")
 
@@ -94,3 +95,6 @@ data = SubResource("MonsterData_skeleton")
 pixel_size = 0.021
 billboard = 2
 texture_filter = 0
+
+[node name="DungeonDressing" type="Node3D" parent="."]
+script = ExtResource("9")

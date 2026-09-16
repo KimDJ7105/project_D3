@@ -1,4 +1,4 @@
-extends Node3D
+extends CharacterBody3D
 class_name Player
 ## Free 8-directional movement on the XZ plane (Y is height/elevation, used
 ## later for the confirmed cover/elevation combat mechanic — see
@@ -10,6 +10,14 @@ class_name Player
 ## Left-click normally moves. Pressing a skill key arms it
 ## (start_aiming_skill()) so the next left-click targets it instead —
 ## see pending_skill_index/skill_aim_requested. Right-click cancels aim.
+##
+## CharacterBody3D (not a plain Node3D) since exploration now needs to
+## collide with real dungeon walls (2026-09-17, first real dungeon layout)
+## — free-roam movement uses move_and_slide(), motion_mode is FLOATING
+## (set on the scene) since there's no gravity here. Combat click-movement
+## (_move_toward()) deliberately still bypasses physics and sets position
+## directly — pathfinding/collision for that is intentionally deferred
+## until it's actually needed (docs/03_combat_system.md).
 
 ## Referenced via preload rather than the bare class_name — see the note on
 ## PlayerScript in scripts/core/GameManager.gd for why.
@@ -129,7 +137,7 @@ func undo_movement() -> void:
 	position = _turn_start_position
 	current_stamina = stats.stamina
 
-func _process(delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	if movement_mode == MovementMode.FREE:
 		_process_free_movement(delta)
 	# COMBAT mode movement is event-driven (mouse click, see _unhandled_input),
@@ -142,8 +150,8 @@ func _process_free_movement(_delta: float) -> void:
 	)
 	if input_dir != Vector2.ZERO:
 		input_dir = input_dir.normalized()
-	position.x += input_dir.x * SPEED * _delta
-	position.z += input_dir.y * SPEED * _delta
+	velocity = Vector3(input_dir.x, 0.0, input_dir.y) * SPEED
+	move_and_slide()
 
 func _unhandled_input(event: InputEvent) -> void:
 	if movement_mode != MovementMode.COMBAT or not is_my_turn:

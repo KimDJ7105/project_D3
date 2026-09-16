@@ -1,12 +1,18 @@
 extends Node3D
 ## Placeholder dungeon scene. Walking near the Enemy marker automatically
-## triggers grid-based combat — a placeholder stand-in for the real
-## encounter trigger (see docs/02_dungeon_town_structure.md). Q manually
-## toggles combat mode too, for testing.
+## triggers combat — a placeholder stand-in for the real encounter trigger
+## (see docs/02_dungeon_town_structure.md). Q manually toggles combat mode
+## too, for testing.
 ##
-## E (interact) is context-sensitive: attack an adjacent living enemy on
+## Combat uses free movement + stamina, not a grid (docs/03_combat_system.md
+## "전투 중 이동과 스테미나", 2026-08-18). A turn no longer ends
+## automatically after one action — the player explicitly ends their turn
+## (F / "end_turn") once they're done moving/acting within their stamina
+## budget.
+##
+## E (interact) is context-sensitive: attack a living enemy in range on
 ## your turn, loot an adjacent dead one, or extract at the gold block.
-## Dragging a throwable inventory item onto a grid tile throws it there
+## Dragging a throwable inventory item onto the world throws it there
 ## instead (see InventoryPanel.item_throw_requested).
 ## No real enemy AI exists — on its turn the enemy always attacks the
 ## player (the only behavior it has), see docs/05_decisions_log.md.
@@ -14,14 +20,14 @@ extends Node3D
 const MonsterScript := preload("res://scripts/entities/Monster.gd")
 const TurnQueueScript := preload("res://scripts/systems/TurnQueue.gd")
 const CombatFormulasScript := preload("res://scripts/systems/CombatFormulas.gd")
-const GridScript := preload("res://scripts/systems/Grid.gd")
+const TargetingScript := preload("res://scripts/systems/Targeting.gd")
 
 const INTERACT_RANGE := 1.5
 const ENCOUNTER_RANGE := 2.5
 const PLAYER_ID := "player"
 
 @onready var _label: Label = $UI/Label
-@onready var _grid_overlay: MeshInstance3D = $GridOverlay
+@onready var _movement_indicator: MeshInstance3D = $MovementRangeIndicator
 @onready var _enemy: MonsterScript = $Enemy
 
 var _turn_queue = null
@@ -44,6 +50,8 @@ func _process(_delta: float) -> void:
 func _input(event: InputEvent) -> void:
 	if event.is_action_pressed("interact"):
 		_on_interact()
+	elif event.is_action_pressed("end_turn"):
+		_end_turn()
 	elif event.is_action_pressed("debug_toggle_combat"):
 		if GameManager.in_combat:
 			_exit_combat()
@@ -72,58 +80,79 @@ func _try_extract() -> void:
 
 func _enter_combat() -> void:
 	GameManager.start_combat()
-	_grid_overlay.visible = true
 	_turn_queue = TurnQueueScript.new()
 	_turn_queue.add_combatant(PLAYER_ID, CombatFormulasScript.effective_speed(GameManager.player.stats))
 	_turn_queue.add_combatant(_enemy.data.monster_id, CombatFormulasScript.effective_speed(_enemy.stats))
 	_current_turn_id = _turn_queue.advance()
+	_resolve_enemy_turns()
 	_update_label()
 
 func _exit_combat() -> void:
 	GameManager.end_combat()
-	_grid_overlay.visible = false
+	_movement_indicator.visible = false
 	_turn_queue = null
 	_current_turn_id = ""
 	_update_label()
 
+## Costs stamina and requires being in range — no more free unlimited
+## attacks regardless of position now that positioning actually matters
+## (docs/03_combat_system.md).
 func _do_attack() -> void:
 	var player = GameManager.player
+	if player.current_stamina < CombatFormulasScript.BASIC_ATTACK_STAMINA_COST:
+		return
 	var damage: int = CombatFormulasScript.basic_attack_damage(player.stats)
+	player.current_stamina -= CombatFormulasScript.BASIC_ATTACK_STAMINA_COST
 	_enemy.take_damage(damage)
-	_advance_past_enemy_turn()
 	_update_label()
 
-## Dragging a throwable item from the inventory onto a grid tile during
-## combat calls this (via InventoryPanel's item_throw_requested signal).
-## The item is spent and the turn passes regardless of whether it actually
-## hit anything — missing still costs you the item and the turn, same as a
-## real throw would. See docs/10_inventory_system.md "전투 중 투척".
-func _on_item_thrown(item: Resource, cell: Vector2i) -> void:
+## Ends the player's turn: no more actions from them until it cycles back
+## around. Runs the enemy's turn(s) immediately after, same as combat entry.
+func _end_turn() -> void:
 	if not (GameManager.in_combat and _current_turn_id == PLAYER_ID):
 		return
-	GameManager.player.inventory.remove_item(item, 1)
-	if _enemy.state == MonsterScript.State.ALIVE:
-		var enemy_cell: Vector2i = GridScript.world_to_cell(_enemy.global_position)
-		if enemy_cell == cell:
-			_enemy.take_damage(item.throw_damage)
-	_advance_past_enemy_turn()
+	GameManager.player.end_turn()
+	_movement_indicator.visible = false
+	_current_turn_id = _turn_queue.advance()
+	_resolve_enemy_turns()
 	_update_label()
 
-## Shared by _do_attack() and _on_item_thrown(): consumes the player's own
-## turn, then runs the enemy's only behavior ("attack the player") for
-## however many CT cycles it gets, until control returns to the player.
-func _advance_past_enemy_turn() -> void:
-	if _enemy.state != MonsterScript.State.ALIVE:
+## Dragging a throwable item from the inventory and dropping it on the world
+## during combat calls this (via InventoryPanel's item_throw_requested
+## signal). A target beyond the item's throw_range is rejected outright
+## (nothing spent); within range but missing the enemy (outside
+## effect_radius) still spends the item and stamina — "던지면 못 무른다"
+## (docs/10_inventory_system.md "전투 중 투척"). Does not end the turn —
+## only an explicit end_turn() does now (docs/03_combat_system.md).
+func _on_item_thrown(item: Resource, target_point: Vector3) -> void:
+	if not (GameManager.in_combat and _current_turn_id == PLAYER_ID):
 		return
-	# _current_turn_id is still "player" at this point (advance() hasn't run
-	# since _enter_combat() or the last action) — consume it first, or the
-	# loop below would never run.
-	_current_turn_id = _turn_queue.advance()
-	while _current_turn_id != PLAYER_ID:
+	var player = GameManager.player
+	if player.current_stamina < CombatFormulasScript.BASIC_ATTACK_STAMINA_COST:
+		return
+	if TargetingScript.flat_distance(player.global_position, target_point) > item.throw_range:
+		return
+	player.current_stamina -= CombatFormulasScript.BASIC_ATTACK_STAMINA_COST
+	player.inventory.remove_item(item, 1)
+	if _enemy.state == MonsterScript.State.ALIVE:
+		if TargetingScript.flat_distance(target_point, _enemy.global_position) <= item.effect_radius:
+			_enemy.take_damage(item.throw_damage)
+	_update_label()
+
+## Runs any leading enemy turns (including the case where the enemy acts
+## first right out of _enter_combat()) until it's the player's turn again,
+## then starts it for them (refills stamina, shows the movement range).
+## Shared by _enter_combat() and _end_turn() so both go through the same
+## logic instead of duplicating it.
+func _resolve_enemy_turns() -> void:
+	while _current_turn_id != PLAYER_ID and _enemy.state == MonsterScript.State.ALIVE:
 		if _current_turn_id == _enemy.data.monster_id:
 			if _enemy_attack():
 				return  # player was defeated; combat already ended and scene changed
 		_current_turn_id = _turn_queue.advance()
+	if _current_turn_id == PLAYER_ID:
+		GameManager.player.start_turn()
+		_movement_indicator.visible = true
 
 ## Returns true if this attack defeated the player — caller must stop
 ## touching combat state immediately afterward, since _handle_player_defeat
@@ -160,9 +189,9 @@ func _update_label() -> void:
 	elif GameManager.in_combat:
 		var player = GameManager.player
 		_label.text = (
-			"GRID COMBAT MODE (test) — click a cell to move, E to attack, drag a throwable item onto a tile to throw it, Q to flee\n"
-			+ "Player HP: %d/%d   |   Skeleton HP: %d/%d   |   Turn: %s"
-			% [player.current_hp, player.stats.vitality, _enemy.current_hp, _enemy.stats.vitality, _current_turn_id]
+			"COMBAT (test) — click to move (stamina-limited), E to attack, drag a throwable item onto the world to throw it, F to end turn, Q to flee\n"
+			+ "Player HP: %d/%d  Stamina: %d/%d   |   Skeleton HP: %d/%d   |   Turn: %s"
+			% [player.current_hp, player.stats.vitality, roundi(player.current_stamina), player.stats.stamina, _enemy.current_hp, _enemy.stats.vitality, _current_turn_id]
 		)
 	else:
-		_label.text = "DUNGEON — WASD to move, walk to the gold block and press E to extract back to town (Q: test grid mode)"
+		_label.text = "DUNGEON — WASD to move, walk to the gold block and press E to extract back to town (Q: test combat mode)"

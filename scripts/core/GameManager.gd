@@ -57,11 +57,12 @@ func _change_scene(path: String, state: GameState) -> void:
 
 ## Temporary stand-in for the real encounter trigger (field contact with an
 ## enemy — see docs/02_dungeon_town_structure.md). Only switches player
-## movement mode for now; no actual grid/turn/combat systems exist yet.
+## movement mode for now; turn/stamina orchestration lives in the combat
+## scene script (e.g. Dungeon.gd).
 func start_combat() -> void:
 	in_combat = true
 	if player:
-		player.enter_grid_mode()
+		player.enter_combat_mode()
 
 
 func end_combat() -> void:

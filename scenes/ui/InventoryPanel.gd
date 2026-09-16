@@ -4,18 +4,18 @@ extends CanvasLayer
 ## its icons on contents_changed. See docs/10_inventory_system.md.
 ##
 ## Drag-drop is fully custom (not Godot's built-in Control drag API)
-## because a drop can land over the 3D combat grid (throwing an item at a
-## tile), not just other Controls — Godot's built-in DnD only understands
-## dropping onto another Control.
+## because a drop can land over the 3D world (throwing an item at a point),
+## not just other Controls — Godot's built-in DnD only understands dropping
+## onto another Control.
 
 const SlotIconScene := preload("res://scenes/ui/InventorySlotIcon.tscn")
-const GridScript := preload("res://scripts/systems/Grid.gd")
+const TargetingScript := preload("res://scripts/systems/Targeting.gd")
 
 ## Emitted when a throwable item is dropped outside the bag while in
 ## combat. Purely an announcement of intent — resolving what actually
-## happens at that cell (hit an enemy? empty tile?) is combat/scene logic,
+## happens at that point (in range? hits anything?) is combat/scene logic,
 ## not the inventory UI's job. See scenes/dungeon/Dungeon.gd.
-signal item_throw_requested(item: Resource, cell: Vector2i)
+signal item_throw_requested(item: Resource, target_point: Vector3)
 
 @onready var _panel: Panel = $Panel
 @onready var _bag: Control = $Panel/Bag
@@ -92,8 +92,8 @@ func _try_throw(icon, screen_pos: Vector2) -> bool:
 	var camera := get_viewport().get_camera_3d()
 	if camera == null:
 		return false
-	var cell = GridScript.raycast_to_cell(camera, screen_pos)
-	if cell == null:
+	var point = TargetingScript.raycast_to_floor_point(camera, screen_pos)
+	if point == null:
 		return false
-	item_throw_requested.emit(icon.item, cell)
+	item_throw_requested.emit(icon.item, point)
 	return true

@@ -12,12 +12,16 @@ class_name ItemData
 @export var stackable: bool = true
 @export var max_stack: int = 99
 
-## Whether this item can be dragged from the inventory onto a combat grid
-## tile to throw it (see docs/10_inventory_system.md "전투 중 투척"). No
+## Whether this item can be dragged from the inventory and dropped onto the
+## world to throw it (see docs/10_inventory_system.md "전투 중 투척"). No
 ## real skill/effect system exists yet — throw_damage is a flat placeholder
 ## number, same spirit as CombatFormulas.basic_attack_damage().
 @export var throwable: bool = false
 @export var throw_damage: int = 5
+## 사거리(투척 거리)와 효과반경 — docs/03_combat_system.md "스킬 범위 구조"
+## (2026-08-18)의 이원 구조를 그대로 씀. 둘 다 밸런싱 placeholder.
+@export var throw_range: float = 5.0
+@export var effect_radius: float = 0.75
 
 ## For equipment-type items: stat_name -> bonus. Empty for non-equipment.
 ## Feeds into the `equipment_modifier` argument of

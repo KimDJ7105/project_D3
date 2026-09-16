@@ -99,5 +99,17 @@ last_updated: 2026-08-09
   - **스킬 범위**: 사거리(시전자→목표 지점 최대 거리) + 효과반경(그 지점 중심 영향 범위)의 이원 구조로 통일, 효과반경 0=단일 타겟/0 초과=광역기. 판정은 XZ 평면 거리 기준(고저차 Y 무시, `Grid.gd`가 이미 하던 평면 가정 계승). 지금 있는 뼛조각 투척도 이 구조에 들어맞음(사거리=투척거리, 효과반경=0) — 단, 실제 재구현은 아직 미착수.
   - 이번 세션은 설계/문서화만 진행, **코드는 아직 안 건드림** — 구현은 다음 작업. — [[03_combat_system]], [[06_skill_style_system]], [[10_inventory_system]]
 
+## 2026-09-16
+- Godot 구현: **08-18에 확정한 그리드 폐기 → 자유 이동+스테미나 전환을 실제로 적용.**
+  - `Stats.gd`에 `stamina`(기본 100 — 다른 스탯의 10점 스케일과 달리, 이동/공격 소모 단위 비용이 자연스러운 값이 되도록 스케일을 다르게 잡음) 추가.
+  - `CombatFormulas.gd`에 `MOVE_STAMINA_COST_PER_UNIT`/`BASIC_ATTACK_STAMINA_COST` 플레이스홀더 상수와 `movement_stamina_cost()`/`max_move_distance()` 추가.
+  - `scripts/systems/Grid.gd` → **`Targeting.gd`로 교체**(셀 변환 함수 전부 제거, `raycast_to_floor_point()`로 월드 좌표 직접 반환 + `flat_distance()`로 XZ 평면 거리 계산 — 스킬 범위 구조의 판정 기준). `Player.gd`/`InventoryPanel.gd`/`Dungeon.gd`가 전부 이걸로 갈아탐.
+  - `Player.gd`: `MovementMode.GRID` → `COMBAT`으로 개명. 전투 중 클릭 이동은 이제 셀 스냅이 아니라 클릭한 지점으로 스테미나가 허용하는 만큼 이동(멀리 클릭해도 갈 수 있는 만큼만 이동 — "클램프", 거부 아님). `is_my_turn`(전투 스크립트가 세팅) 플래그를 추가해 자기 턴이 아니면 클릭 이동 자체가 안 되게 막음 — 이전엔 이동이 턴 순서를 전혀 신경 안 썼던 구멍이 있었는데 이번에 같이 막힘. `start_turn()`/`end_turn()`으로 스테미나 리필/턴 활성 상태를 관리.
+  - `scenes/dungeon/GridOverlay.gd` → **`MovementRangeIndicator.gd`로 교체**: 그리드 선 대신 플레이어 위치 중심의 원반(반지름 = 남은 스테미나로 갈 수 있는 거리)을 보여줌, 정확한 클램프 지점 프리뷰(호버 마커)는 이번엔 스코프에서 뺌(나중에 필요하면 추가).
+  - `Dungeon.gd`: **턴 구조를 "행동 1회=턴 종료"에서 명시적 종료로 변경** — 새 `end_turn` 입력 액션(F 키) 추가, `_do_attack()`/`_on_item_thrown()`이 더 이상 턴을 자동으로 넘기지 않음. 공격은 스테미나 부족하면 거부(사거리 체크는 원래 있던 `INTERACT_RANGE` 근접 판정을 그대로 "단일 타겟 사거리"로 재해석해서 재사용). `_enter_combat()`과 `_end_turn()`이 중복 로직 없이 같은 `_resolve_enemy_turns()`를 공유하도록 리팩터링 — 겸사겸사 "적이 먼저 턴을 잡으면 아무 반응 없이 멈추는" 잠재 버그도 같이 고침(이전엔 콤벳 진입 시 첫 턴이 적이면 그 턴을 실행하는 코드가 없었음).
+  - `Dungeon.gd`의 투척(`_on_item_thrown`)을 그리드 셀 일치 판정에서 사거리(`item.throw_range`, 범위 밖이면 아이템/스테미나 소모 없이 그냥 거부)+효과반경(`item.effect_radius`, 범위 안인데 빗나가면 그래도 아이템/스테미나 소모) 판정으로 재구현. `ItemData.gd`에 두 필드 추가(둘 다 밸런싱 placeholder).
+  - `InventoryPanel.gd`의 투척 드롭도 셀 대신 월드 좌표(`Vector3`)를 실어 보내도록 시그널 시그니처 변경.
+  - 헤드리스 스모크 테스트로 이동 클램프(범위 초과 클릭 시 딱 갈 수 있는 만큼만 이동, 스테미나 0에선 전혀 이동 안 함), 공격의 스테미나 게이팅(부족하면 거부/충분하면 소모+데미지+턴 안 넘어감), 투척의 사거리 거부/효과반경 판정, 턴 종료→적 턴→플레이어 턴 복귀+스테미나 전량 리필, 자기 턴 아닐 때 이동 완전 차단까지 전부 검증. — [[03_combat_system]]
+
 ## 관련 문서
 - [[00_game_overview]]

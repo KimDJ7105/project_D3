@@ -5,6 +5,7 @@ class_name MonsterData
 ## quick placeholder testing, as Dungeon.tscn currently does).
 
 const StatsScript := preload("res://scripts/data/Stats.gd")
+const SkillDataScript := preload("res://scripts/data/SkillData.gd")
 
 @export var monster_id: String = ""
 @export var display_name: String = ""
@@ -13,6 +14,12 @@ const StatsScript := preload("res://scripts/data/Stats.gd")
 ## Base stats for this monster type. Monster.gd duplicates this on spawn so
 ## damaging one instance never mutates the shared authored resource.
 @export var base_stats: StatsScript
+
+## The skill this monster uses on its turn — same SkillData/skill_damage()
+## pipeline as the player's equipped skills (docs/06_skill_style_system.md).
+## No real monster AI exists yet (see Dungeon.gd) — this is just what it
+## always uses, since attacking is its only behavior right now.
+@export var attack_skill: SkillDataScript
 
 ## Each entry: {"item": ItemData, "chance": float (0-1), "min_qty": int, "max_qty": int}.
 ## Drop chances/quantities are unbalanced placeholders — see docs/05_decisions_log.md.

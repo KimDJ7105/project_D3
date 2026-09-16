@@ -11,12 +11,16 @@ extends Node3D
 ## budget. Movement can be freely undone (R / "undo_movement") until the
 ## player attacks or throws something — see Player.mark_acted().
 ##
-## E (interact) is context-sensitive: attack a living enemy in range on
-## your turn, loot an adjacent dead one, or extract at the gold block.
+## E (interact) uses equipped_skills[0] ("베기") on a living enemy in range
+## on your turn, or loots an adjacent dead one, or extracts at the gold
+## block. "2" ("skill_2") uses equipped_skills[1] ("강타") instead — see
+## Player.equipped_skills and CombatFormulas.skill_damage()
+## (docs/06_skill_style_system.md). No skill slot/loadout UI exists yet, so
+## these two are just hardcoded on Player for now.
 ## Dragging a throwable inventory item onto the world throws it there
 ## instead (see InventoryPanel.item_throw_requested).
-## No real enemy AI exists — on its turn the enemy always attacks the
-## player (the only behavior it has), see docs/05_decisions_log.md.
+## No real enemy AI exists — on its turn the enemy always uses its one
+## attack_skill against the player, see docs/05_decisions_log.md.
 
 const MonsterScript := preload("res://scripts/entities/Monster.gd")
 const TurnQueueScript := preload("res://scripts/systems/TurnQueue.gd")
@@ -51,6 +55,8 @@ func _process(_delta: float) -> void:
 func _input(event: InputEvent) -> void:
 	if event.is_action_pressed("interact"):
 		_on_interact()
+	elif event.is_action_pressed("skill_2"):
+		_try_use_skill(1)
 	elif event.is_action_pressed("end_turn"):
 		_end_turn()
 	elif event.is_action_pressed("undo_movement"):
@@ -65,12 +71,10 @@ func _on_interact() -> void:
 	var player: Node3D = GameManager.player
 	if player == null:
 		return
-	var near_enemy: bool = player.global_position.distance_to(_enemy.global_position) <= INTERACT_RANGE
-
-	if GameManager.in_combat and near_enemy and _enemy.state == MonsterScript.State.ALIVE:
-		if _current_turn_id == PLAYER_ID:
-			_do_attack()
+	if GameManager.in_combat and _current_turn_id == PLAYER_ID and _enemy.state == MonsterScript.State.ALIVE:
+		_try_use_skill(0)
 		return
+	var near_enemy: bool = player.global_position.distance_to(_enemy.global_position) <= INTERACT_RANGE
 	if near_enemy and _enemy.state == MonsterScript.State.DEAD:
 		_do_loot()
 		return
@@ -97,16 +101,22 @@ func _exit_combat() -> void:
 	_current_turn_id = ""
 	_update_label()
 
-## Costs stamina and requires being in range — no more free unlimited
-## attacks regardless of position now that positioning actually matters
-## (docs/03_combat_system.md). Locks out undo_movement() for the rest of
-## the turn once it lands — see Player.mark_acted().
-func _do_attack() -> void:
+## Uses GameManager.player.equipped_skills[index] on the enemy — checks the
+## skill's own range and stamina cost (docs/03_combat_system.md "스킬 범위
+## 구조"), rejecting silently (nothing spent) if either fails. Single-target
+## skills (effect_radius == 0) are resolved as a direct distance check
+## against the enemy itself, not a point-in-space radius. Locks out
+## undo_movement() for the rest of the turn once it lands — see
+## Player.mark_acted().
+func _try_use_skill(index: int) -> void:
 	var player = GameManager.player
-	if player.current_stamina < CombatFormulasScript.BASIC_ATTACK_STAMINA_COST:
+	var skill = player.equipped_skills[index]
+	if player.current_stamina < skill.stamina_cost:
 		return
-	var damage: int = CombatFormulasScript.basic_attack_damage(player.stats)
-	player.current_stamina -= CombatFormulasScript.BASIC_ATTACK_STAMINA_COST
+	if TargetingScript.flat_distance(player.global_position, _enemy.global_position) > skill.range:
+		return
+	var damage: int = CombatFormulasScript.skill_damage(player.stats, skill)
+	player.current_stamina -= skill.stamina_cost
 	player.mark_acted()
 	_enemy.take_damage(damage)
 	_update_label()
@@ -143,11 +153,11 @@ func _on_item_thrown(item: Resource, target_point: Vector3) -> void:
 	if not (GameManager.in_combat and _current_turn_id == PLAYER_ID):
 		return
 	var player = GameManager.player
-	if player.current_stamina < CombatFormulasScript.BASIC_ATTACK_STAMINA_COST:
+	if player.current_stamina < CombatFormulasScript.THROW_STAMINA_COST:
 		return
 	if TargetingScript.flat_distance(player.global_position, target_point) > item.throw_range:
 		return
-	player.current_stamina -= CombatFormulasScript.BASIC_ATTACK_STAMINA_COST
+	player.current_stamina -= CombatFormulasScript.THROW_STAMINA_COST
 	player.mark_acted()
 	player.inventory.remove_item(item, 1)
 	if _enemy.state == MonsterScript.State.ALIVE:
@@ -175,7 +185,7 @@ func _resolve_enemy_turns() -> void:
 ## already exits combat and switches scenes.
 func _enemy_attack() -> bool:
 	var player = GameManager.player
-	var damage: int = CombatFormulasScript.basic_attack_damage(_enemy.stats)
+	var damage: int = CombatFormulasScript.skill_damage(_enemy.stats, _enemy.data.attack_skill)
 	player.take_damage(damage)
 	if player.current_hp <= 0:
 		_handle_player_defeat()
@@ -205,7 +215,7 @@ func _update_label() -> void:
 	elif GameManager.in_combat:
 		var player = GameManager.player
 		_label.text = (
-			"COMBAT (test) — click to move (stamina-limited), E to attack, drag a throwable item onto the world to throw it, R to undo movement (until you act), F to end turn, Q to flee\n"
+			"COMBAT (test) — click to move (stamina-limited), E: 베기, 2: 강타, drag a throwable item onto the world to throw it, R to undo movement (until you act), F to end turn, Q to flee\n"
 			+ "Player HP: %d/%d  Stamina: %d/%d   |   Skeleton HP: %d/%d   |   Turn: %s"
 			% [player.current_hp, player.stats.vitality, roundi(player.current_stamina), player.stats.stamina, _enemy.current_hp, _enemy.stats.vitality, _current_turn_id]
 		)

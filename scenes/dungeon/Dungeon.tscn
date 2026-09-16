@@ -7,6 +7,7 @@
 [ext_resource type="Script" uid="uid://crcbwq8bkfcii" path="res://scripts/data/MonsterData.gd" id="5"]
 [ext_resource type="Script" uid="uid://guclwa75w6lb" path="res://scripts/data/Stats.gd" id="6"]
 [ext_resource type="Script" uid="uid://ch1qo5oerku3o" path="res://scripts/data/ItemData.gd" id="7"]
+[ext_resource type="Resource" path="res://data/skills/bone_strike.tres" id="8"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_floor"]
 size = Vector2(20, 20)
@@ -43,6 +44,7 @@ monster_id = "skeleton_warrior"
 display_name = "Skeleton Warrior"
 sprite = ExtResource("3")
 base_stats = SubResource("Stats_skeleton")
+attack_skill = ExtResource("8")
 loot_table = [{
 "chance": 1.0,
 "item": SubResource("ItemData_bone"),

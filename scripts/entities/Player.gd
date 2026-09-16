@@ -13,6 +13,7 @@ const TargetingScript := preload("res://scripts/systems/Targeting.gd")
 const StatsScript := preload("res://scripts/data/Stats.gd")
 const InventoryScript := preload("res://scripts/systems/Inventory.gd")
 const CombatFormulasScript := preload("res://scripts/systems/CombatFormulas.gd")
+const SkillDataScript := preload("res://scripts/data/SkillData.gd")
 
 enum MovementMode { FREE, COMBAT }
 
@@ -25,6 +26,14 @@ var stats: StatsScript = StatsScript.new()
 var inventory: InventoryScript = InventoryScript.new()
 var current_hp: int
 var current_stamina: float
+
+## Fixed for now — no skill slot/loadout UI exists yet
+## (docs/06_skill_style_system.md 열린 질문). Combat input maps index 0 to
+## "interact" (E) and index 1 to "skill_2" — see Dungeon.gd._try_use_skill().
+var equipped_skills: Array[SkillDataScript] = [
+	preload("res://data/skills/slash.tres"),
+	preload("res://data/skills/heavy_strike.tres"),
+]
 
 ## Whether it's currently this player's turn in combat — set by the combat
 ## scene script (e.g. Dungeon.gd), not decided here. Click-to-move only

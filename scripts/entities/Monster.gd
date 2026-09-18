@@ -10,6 +10,7 @@ class_name Monster
 
 const StatsScript := preload("res://scripts/data/Stats.gd")
 const MonsterDataScript := preload("res://scripts/data/MonsterData.gd")
+const TargetingScript := preload("res://scripts/systems/Targeting.gd")
 
 enum State { ALIVE, DEAD }
 
@@ -25,12 +26,34 @@ var dropped_loot: Array = []  # populated on death: [{"item": ItemData, "quantit
 
 @onready var _sprite: Sprite3D = $Sprite3D
 
+var _pick_body: StaticBody3D
+
 
 func _ready() -> void:
 	stats = data.base_stats.duplicate() if data and data.base_stats else StatsScript.new()
 	current_hp = stats.vitality
 	if data and data.sprite and _sprite:
 		_sprite.texture = data.sprite
+	_build_pick_body()
+
+
+## Click-pick volume matching the sprite's bounds, on its own physics layer
+## (Targeting.ENEMY_PICK_LAYER) so it never blocks movement and walls can't
+## steal clicks aimed at it — see Targeting.pick_enemy().
+func _build_pick_body() -> void:
+	_pick_body = StaticBody3D.new()
+	_pick_body.collision_layer = TargetingScript.ENEMY_PICK_LAYER
+	_pick_body.collision_mask = 0
+	var box := BoxShape3D.new()
+	var bounds := AABB(Vector3(-0.5, 0.0, -0.5), Vector3(1.0, 1.6, 1.0))
+	if _sprite and _sprite.texture:
+		bounds = _sprite.get_aabb()
+	box.size = Vector3(bounds.size.x, bounds.size.y, maxf(bounds.size.x, 0.5))
+	var shape := CollisionShape3D.new()
+	shape.shape = box
+	shape.position = bounds.get_center()
+	_pick_body.add_child(shape)
+	add_child(_pick_body)
 
 
 func take_damage(amount: int) -> void:
@@ -43,6 +66,7 @@ func take_damage(amount: int) -> void:
 
 func _die() -> void:
 	state = State.DEAD
+	_pick_body.collision_layer = 0  # a corpse isn't a valid attack target
 	dropped_loot = _roll_loot()
 	died.emit(self)
 

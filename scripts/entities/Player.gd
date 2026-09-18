@@ -37,7 +37,9 @@ signal died
 ## start_aiming_skill()) and then left-clicks a world point to confirm the
 ## target — the combat scene (Dungeon.gd) resolves what that hits, same
 ## split as InventoryPanel.item_throw_requested.
-signal skill_aim_requested(index: int, target: Vector3)
+## `picked` is the enemy the click landed on (physics pick, ignores walls —
+## see Targeting.pick_enemy()), or null if the click wasn't on one.
+signal skill_aim_requested(index: int, target: Vector3, picked: Node3D)
 
 var movement_mode: MovementMode = MovementMode.FREE
 var stats: StatsScript = StatsScript.new()
@@ -164,13 +166,16 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.button_index != MOUSE_BUTTON_LEFT:
 		return
 	var target = TargetingScript.raycast_to_floor_point(_camera, event.position, position.y)
-	if target == null:
-		return
 	if is_aiming():
+		var picked: Node3D = TargetingScript.pick_enemy(_camera, event.position)
+		if target == null:
+			if picked == null:
+				return
+			target = picked.global_position
 		var index := pending_skill_index
 		pending_skill_index = -1
-		skill_aim_requested.emit(index, target)
-	else:
+		skill_aim_requested.emit(index, target, picked)
+	elif target != null:
 		_move_toward(target)
 
 ## Moves as far toward `target` as remaining stamina allows (clamped, not

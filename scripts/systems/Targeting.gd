@@ -17,6 +17,26 @@ static func raycast_to_floor_point(camera: Camera3D, screen_pos: Vector2, floor_
 	var floor_plane := Plane(Vector3.UP, floor_y)
 	return floor_plane.intersects_ray(from, dir)
 
+## Physics layer (bit value, i.e. layer 2) enemies' click-pick bodies live
+## on. Walls stay on the default layer 1, so a pick ray masked to this
+## layer ignores them entirely — a wall drawn in front of an enemy can't
+## steal the click. Separate from what blocks player movement (layer 1).
+const ENEMY_PICK_LAYER := 2
+
+## Casts a ray from the screen position through `camera` against enemy pick
+## bodies only, and returns the enemy node (the pick body's parent) it hit
+## first, or null. Used instead of the floor-plane point for single-target
+## skills: on a tilted camera a click on an enemy's body lands on the floor
+## well *behind* its feet, so a floor-point tolerance check misses.
+static func pick_enemy(camera: Camera3D, screen_pos: Vector2) -> Node3D:
+	var from: Vector3 = camera.project_ray_origin(screen_pos)
+	var to: Vector3 = from + camera.project_ray_normal(screen_pos) * 1000.0
+	var query := PhysicsRayQueryParameters3D.create(from, to, ENEMY_PICK_LAYER)
+	var hit: Dictionary = camera.get_world_3d().direct_space_state.intersect_ray(query)
+	if hit.is_empty():
+		return null
+	return (hit.collider as Node).get_parent() as Node3D
+
 ## Distance on the XZ plane only (ignores Y/elevation) — range and effect-
 ## radius checks are judged on this plane; elevation is a separate range/
 ## accuracy bonus, not part of the radius check (docs/03_combat_system.md

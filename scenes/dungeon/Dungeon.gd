@@ -54,6 +54,8 @@ func _ready() -> void:
 
 func _process(_delta: float) -> void:
 	if GameManager.in_combat:
+		if GameManager.player.is_moving:
+			_update_label()  # keep the stamina readout live while walking
 		return
 	var player: Node3D = GameManager.player
 	if player == null or _enemy == null or _enemy.state != MonsterScript.State.ALIVE:
@@ -97,6 +99,8 @@ func _arm_skill(index: int) -> void:
 	if not (GameManager.in_combat and _current_turn_id == PLAYER_ID):
 		return
 	var player = GameManager.player
+	if player.is_moving:
+		return
 	if player.pending_skill_index == index:
 		player.cancel_aim()
 	else:
@@ -178,7 +182,7 @@ func _on_skill_aim_requested(index: int, target_point: Vector3, picked: Node3D) 
 ## the turn) but only available before the player has attacked or thrown
 ## anything this turn — see Player.can_undo_movement().
 func _undo_movement() -> void:
-	if not (GameManager.in_combat and _current_turn_id == PLAYER_ID):
+	if not (GameManager.in_combat and _current_turn_id == PLAYER_ID) or GameManager.player.is_moving:
 		return
 	GameManager.player.undo_movement()
 	_update_label()
@@ -186,7 +190,7 @@ func _undo_movement() -> void:
 ## Ends the player's turn: no more actions from them until it cycles back
 ## around. Runs the enemy's turn(s) immediately after, same as combat entry.
 func _end_turn() -> void:
-	if not (GameManager.in_combat and _current_turn_id == PLAYER_ID):
+	if not (GameManager.in_combat and _current_turn_id == PLAYER_ID) or GameManager.player.is_moving:
 		return
 	GameManager.player.end_turn()
 	_movement_indicator.visible = false
@@ -205,6 +209,8 @@ func _on_item_thrown(item: Resource, target_point: Vector3) -> void:
 	if not (GameManager.in_combat and _current_turn_id == PLAYER_ID):
 		return
 	var player = GameManager.player
+	if player.is_moving:
+		return
 	if player.current_stamina < CombatFormulasScript.THROW_STAMINA_COST:
 		return
 	if TargetingScript.flat_distance(player.global_position, target_point) > item.throw_range:
@@ -271,7 +277,7 @@ func _update_label() -> void:
 			var aimed_skill = player.equipped_skills[player.pending_skill_index]
 			aim_hint = "AIMING %s (range %.1f) — click a target, right-click/press again to cancel" % [aimed_skill.display_name, aimed_skill.range]
 		else:
-			aim_hint = "click to move (stamina-limited), E: 베기, 2: 강타"
+			aim_hint = "click to walk (stamina-limited; click again to stop), E: 베기, 2: 강타"
 		_label.text = (
 			"COMBAT (test) — %s, drag a throwable item onto the world to throw it, R to undo movement (until you act), F to end turn, Q to flee\n"
 			% aim_hint

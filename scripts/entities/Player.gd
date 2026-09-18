@@ -15,11 +15,9 @@ class_name Player
 ## with real dungeon walls (2026-09-17, first real dungeon layout) —
 ## free-roam movement uses move_and_slide(). Gravity was added 2026-09-19
 ## (motion_mode GROUNDED) so the player can walk up ramps/onto platforms
-## for the elevation system. Combat click-movement (_move_toward())
-## deliberately still bypasses physics and sets position directly —
-## pathfinding/collision for that is intentionally deferred until it's
-## actually needed (docs/03_combat_system.md); it just snaps to the ground
-## height at the destination.
+## for the elevation system. Combat click-movement (start_walk()) walks a
+## navmesh path with the same physics body (2026-09-19; it used to
+## teleport, straight through walls) — see docs/03_combat_system.md.
 
 ## Referenced via preload rather than the bare class_name — see the note on
 ## PlayerScript in scripts/core/GameManager.gd for why.
@@ -33,6 +31,11 @@ enum MovementMode { FREE, COMBAT }
 
 const SPEED := 4.0  # free-roam movement units/sec — unrelated to the 속도 combat stat below
 const GRAVITY := 20.0  # placeholder feel value — units/sec^2, pulls the player onto platforms/ramps/floor
+const COMBAT_MOVE_SPEED := 5.0  # walking speed during a combat move — placeholder feel value
+## How far a path's end may fall short of the (snapped) goal before it counts
+## as "not connected" — the navmesh returns a partial path in that case.
+const PATH_CONNECT_TOLERANCE := 0.25
+const STUCK_TIMEOUT := 0.5  # seconds of barely moving before a walk gives up
 
 signal died
 
@@ -78,6 +81,14 @@ var _has_acted_this_turn: bool = false
 ## is what actually lets a click express a target/aim point, instead of
 ## a skill just auto-resolving against whatever's nearby).
 var pending_skill_index: int = -1
+
+## True while walking a combat move (see start_walk()). The combat scene
+## blocks other actions (skills, ending the turn, undo, throwing) while this
+## is set; a click stops the walk instead.
+var is_moving: bool = false
+var _walk_path: PackedVector3Array = PackedVector3Array()
+var _walk_index: int = 0
+var _stuck_time: float = 0.0
 
 @onready var _camera: Camera3D = $Camera3D
 @onready var _inventory_panel: CanvasLayer = $InventoryPanel
@@ -125,6 +136,8 @@ func can_undo_movement() -> bool:
 ## cancel) resolves it instead of moving. Called by the combat scene when
 ## a skill key is pressed (e.g. E, "2").
 func start_aiming_skill(index: int) -> void:
+	if is_moving:
+		return
 	pending_skill_index = index
 
 func cancel_aim() -> void:
@@ -137,7 +150,7 @@ func is_aiming() -> bool:
 ## turn, as if no movement happened yet. No-op if an attack/throw has
 ## already happened this turn (see can_undo_movement()).
 func undo_movement() -> void:
-	if not can_undo_movement():
+	if not can_undo_movement() or is_moving:
 		return
 	position = _turn_start_position
 	current_stamina = stats.stamina
@@ -146,13 +159,7 @@ func _physics_process(delta: float) -> void:
 	if movement_mode == MovementMode.FREE:
 		_process_free_movement(delta)
 	else:
-		# COMBAT horizontal movement is event-driven (mouse click, see
-		# _unhandled_input) — this just keeps gravity settling the player
-		# onto the ground between/after those position jumps.
-		velocity.x = 0.0
-		velocity.z = 0.0
-		_apply_gravity(delta)
-		move_and_slide()
+		_process_combat_movement(delta)
 
 func _process_free_movement(delta: float) -> void:
 	var input_dir := Vector2(
@@ -177,6 +184,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if not (event is InputEventMouseButton and event.pressed):
 		return
+	if is_moving:
+		# Any click while walking just stops — it doesn't start a new move or
+		# fire a skill, so a stray click can't do something unintended.
+		stop_walking()
+		return
 	if is_aiming() and event.button_index == MOUSE_BUTTON_RIGHT:
 		cancel_aim()
 		return
@@ -193,30 +205,99 @@ func _unhandled_input(event: InputEvent) -> void:
 		pending_skill_index = -1
 		skill_aim_requested.emit(index, target, picked)
 	elif target != null:
-		_move_toward(target)
+		start_walk(target)
 
-## Moves as far toward `target` as remaining stamina allows (clamped, not
-## rejected outright, so a far click still moves you your full range —
-## matches how the movement-range indicator previews it).
-func _move_toward(target: Vector3) -> void:
-	var to_target: Vector3 = target - position
-	to_target.y = 0.0
-	var distance: float = to_target.length()
-	if distance <= 0.001:
+## Starts walking toward `target` along a navmesh path (docs/03_combat_system.md
+## "전투 중 이동과 스테미나"):
+## - the target is snapped to the nearest walkable point, so clicking a
+##   wall (or anything unwalkable) walks you up to it;
+## - if that point isn't connected to where you're standing, nothing
+##   happens at all;
+## - the path is cut where stamina runs out, so a click beyond your budget
+##   walks as far as you can afford.
+## Stamina is spent as you actually walk (see _process_combat_movement), so
+## stopping early only costs what you walked.
+func start_walk(target: Vector3) -> void:
+	if is_moving:
 		return
-	var affordable: float = CombatFormulasScript.max_move_distance(current_stamina)
-	var actual_distance: float = min(distance, affordable)
-	if actual_distance <= 0.001:
+	var nav_map: RID = get_world_3d().navigation_map
+	var goal: Vector3 = NavigationServer3D.map_get_closest_point(nav_map, target)
+	var path: PackedVector3Array = NavigationServer3D.map_get_path(nav_map, position, goal, true)
+	if path.size() < 2:
 		return
-	position += to_target.normalized() * actual_distance
-	# Combat movement sets position directly (no physics, no pathfinding),
-	# so match the ground height at the destination ourselves — otherwise
-	# a move off a platform would leave the player hovering/embedded until
-	# gravity catches up. Extra stamina for climbing isn't implemented yet.
-	var ground = TargetingScript.ground_height(get_world_3d(), position.x, position.z, position.y + 5.0)
-	if ground != null:
-		position.y = ground
-	current_stamina -= CombatFormulasScript.movement_stamina_cost(actual_distance)
+	if TargetingScript.flat_distance(path[path.size() - 1], goal) > PATH_CONNECT_TOLERANCE:
+		return  # not connected — the path only got partway toward the goal
+	var budget: float = CombatFormulasScript.max_move_distance(current_stamina)
+	_walk_path = _truncate_path(path, budget)
+	if _walk_path.size() < 2:
+		return
+	_walk_index = 1
+	_stuck_time = 0.0
+	is_moving = true
+
+## Cancels an in-progress walk right where the player is.
+func stop_walking() -> void:
+	is_moving = false
+	_walk_path = PackedVector3Array()
+	_walk_index = 0
+
+## The part of `path` within `budget` horizontal distance from its start
+## (cutting the last segment partway if needed). Horizontal only — extra
+## stamina for climbing isn't implemented yet.
+func _truncate_path(path: PackedVector3Array, budget: float) -> PackedVector3Array:
+	var result := PackedVector3Array([path[0]])
+	var remaining: float = budget
+	for i in range(1, path.size()):
+		var segment: float = TargetingScript.flat_distance(path[i - 1], path[i])
+		if segment <= remaining:
+			result.append(path[i])
+			remaining -= segment
+		else:
+			if remaining > 0.001:
+				result.append(path[i - 1].lerp(path[i], remaining / segment))
+			break
+	return result
+
+## COMBAT-mode physics step: walks along _walk_path if a walk is active,
+## otherwise just lets gravity keep the player on the ground.
+func _process_combat_movement(delta: float) -> void:
+	velocity.x = 0.0
+	velocity.z = 0.0
+	if not is_moving:
+		_apply_gravity(delta)
+		move_and_slide()
+		return
+
+	var waypoint: Vector3 = _walk_path[_walk_index]
+	var to_waypoint := Vector2(waypoint.x - position.x, waypoint.z - position.z)
+	var distance: float = to_waypoint.length()
+	var speed: float = minf(COMBAT_MOVE_SPEED, distance / delta)  # don't overshoot the waypoint
+	if distance > 0.001:
+		var direction: Vector2 = to_waypoint / distance
+		velocity.x = direction.x * speed
+		velocity.z = direction.y * speed
+	_apply_gravity(delta)
+	var before := position
+	move_and_slide()
+	var walked: float = TargetingScript.flat_distance(before, position)
+	current_stamina = maxf(0.0, current_stamina - CombatFormulasScript.movement_stamina_cost(walked))
+
+	# Stuck against something the path didn't account for: give up rather
+	# than push against it forever.
+	if walked < COMBAT_MOVE_SPEED * delta * 0.2:
+		_stuck_time += delta
+		if _stuck_time > STUCK_TIMEOUT:
+			stop_walking()
+			return
+	else:
+		_stuck_time = 0.0
+
+	if TargetingScript.flat_distance(position, waypoint) < 0.05:
+		_walk_index += 1
+		if _walk_index >= _walk_path.size():
+			stop_walking()
+	if current_stamina <= 0.001:
+		stop_walking()
 
 func enter_combat_mode() -> void:
 	movement_mode = MovementMode.COMBAT
@@ -225,3 +306,4 @@ func enter_free_mode() -> void:
 	movement_mode = MovementMode.FREE
 	is_my_turn = false
 	pending_skill_index = -1
+	stop_walking()

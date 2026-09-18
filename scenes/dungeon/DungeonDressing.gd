@@ -78,6 +78,25 @@ func _ready() -> void:
 	for entry in TORCHES:
 		_add_torch(entry[0], entry[1])
 	_build_ground(rubble_material)
+	_bake_navigation()
+
+## Bakes a navmesh from this scene's solid geometry so combat click-moves
+## can path around walls/pillars instead of teleporting through them. Runs
+## once here, right after the geometry is built — the layout is fixed, so
+## the result is always the same. Only layer-1 bodies count (walls, ground):
+## enemy pick bodies are layer 2 and shouldn't carve holes.
+func _bake_navigation() -> void:
+	var nav_mesh := NavigationMesh.new()
+	nav_mesh.geometry_parsed_geometry_type = NavigationMesh.PARSED_GEOMETRY_STATIC_COLLIDERS
+	nav_mesh.geometry_collision_mask = 1
+	nav_mesh.agent_radius = 0.4   # matches the player's capsule
+	nav_mesh.agent_height = 1.2
+	var source := NavigationMeshSourceGeometryData3D.new()
+	NavigationServer3D.parse_source_geometry_data(nav_mesh, source, get_parent())
+	NavigationServer3D.bake_from_source_geometry_data(nav_mesh, source)
+	var region := NavigationRegion3D.new()
+	region.navigation_mesh = nav_mesh
+	add_child(region)
 
 ## Solid ground for gravity to land on. The visible floor is the Floor
 ## mesh in Dungeon.tscn — this adds the collision under it (top at y=0,

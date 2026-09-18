@@ -43,4 +43,4 @@ func _process(_delta: float) -> void:
 	disc.bottom_radius = radius
 	disc.height = 0.02
 	mesh = disc
-	global_position = Vector3(player.global_position.x, y_offset, player.global_position.z)
+	global_position = Vector3(player.global_position.x, player.global_position.y + y_offset, player.global_position.z)

@@ -16,6 +16,8 @@ extends Node3D
 ## builds its disc mesh) rather than typed out as dozens of individual scene
 ## nodes — same content, easier to read/adjust as a list of numbers.
 
+const TargetingScript := preload("res://scripts/systems/Targeting.gd")
+
 const WALL_HEIGHT := 3.0
 const WALL_COLOR := Color(0.45, 0.45, 0.48)
 const RUBBLE_COLOR := Color(0.4, 0.38, 0.36)
@@ -40,6 +42,19 @@ const PILLARS := [
 	[3.0, 2.0, 3.0, 2.0],
 ]
 
+## Elevation prototype (2026-09-19): a raised platform in the chamber with a
+## ramp up to it, purely to exercise gravity / ground-following / height
+## reading before the real floor-1 layout gets designed with height.
+## Platform: [center_x, center_z, size_x, size_z, height]; its top is at
+## `height`. Ramp: rises toward -Z from the floor (y=0) at RAMP_START_Z to
+## the platform's top at RAMP_END_Z, across x = RAMP_CENTER_X +- RAMP_WIDTH/2.
+const PLATFORM := [4.5, -6.5, 4.0, 3.0, 1.0]
+const RAMP_CENTER_X := 4.5
+const RAMP_WIDTH := 4.0
+const RAMP_START_Z := -2.0
+const RAMP_END_Z := -5.0
+const RAMP_THICKNESS := 0.3
+
 ## Torch positions (post + warm point light), scattered along the walls.
 const TORCHES := [
 	[-7.5, 6.0], [7.0, 6.0],
@@ -62,6 +77,52 @@ func _ready() -> void:
 		_add_block(entry[0], entry[1], entry[2], entry[3], WALL_HEIGHT, rubble_material)
 	for entry in TORCHES:
 		_add_torch(entry[0], entry[1])
+	_build_ground(rubble_material)
+
+## Solid ground for gravity to land on. The visible floor is the Floor
+## mesh in Dungeon.tscn — this adds the collision under it (top at y=0,
+## no mesh of its own), plus the prototype platform and ramp.
+func _build_ground(material: StandardMaterial3D) -> void:
+	_add_ground_solid(Vector3(0, -0.5, 0), Vector3(24, 1, 24), 0.0, null)
+
+	var height: float = PLATFORM[4]
+	_add_ground_solid(
+		Vector3(PLATFORM[0], height / 2.0, PLATFORM[1]),
+		Vector3(PLATFORM[2], height, PLATFORM[3]), 0.0, material)
+
+	# Ramp: a thin box tilted about X so its top surface runs from (y=0 at
+	# RAMP_START_Z) to (y=height at RAMP_END_Z). Box center sits half a
+	# thickness *below* the surface midpoint, along the surface normal.
+	var run: float = RAMP_START_Z - RAMP_END_Z
+	var length: float = sqrt(run * run + height * height)
+	var angle: float = atan2(height, run)
+	var surface_mid := Vector3(RAMP_CENTER_X, height / 2.0, (RAMP_START_Z + RAMP_END_Z) / 2.0)
+	var normal := Vector3(0.0, cos(angle), sin(angle))
+	_add_ground_solid(
+		surface_mid - normal * (RAMP_THICKNESS / 2.0),
+		Vector3(RAMP_WIDTH, RAMP_THICKNESS, length), rad_to_deg(angle), material)
+
+## Ground bodies sit on layer 1 (so the player collides with them) *and*
+## Targeting.GROUND_LAYER (so height/click rays can find them without
+## hitting walls). Pass a null material for collision-only.
+func _add_ground_solid(center: Vector3, size: Vector3, rotation_x_deg: float, material: StandardMaterial3D) -> void:
+	var body := StaticBody3D.new()
+	body.collision_layer = 1 | TargetingScript.GROUND_LAYER
+	body.position = center
+	body.rotation_degrees.x = rotation_x_deg
+	var shape := CollisionShape3D.new()
+	var box_shape := BoxShape3D.new()
+	box_shape.size = size
+	shape.shape = box_shape
+	body.add_child(shape)
+	if material != null:
+		var box := BoxMesh.new()
+		box.size = size
+		var mesh_instance := MeshInstance3D.new()
+		mesh_instance.mesh = box
+		mesh_instance.material_override = material
+		body.add_child(mesh_instance)
+	add_child(body)
 
 func _add_block(center_x: float, center_z: float, size_x: float, size_z: float, height: float, material: StandardMaterial3D) -> void:
 	var box := BoxMesh.new()

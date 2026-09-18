@@ -11,13 +11,15 @@ class_name Player
 ## (start_aiming_skill()) so the next left-click targets it instead —
 ## see pending_skill_index/skill_aim_requested. Right-click cancels aim.
 ##
-## CharacterBody3D (not a plain Node3D) since exploration now needs to
-## collide with real dungeon walls (2026-09-17, first real dungeon layout)
-## — free-roam movement uses move_and_slide(), motion_mode is FLOATING
-## (set on the scene) since there's no gravity here. Combat click-movement
-## (_move_toward()) deliberately still bypasses physics and sets position
-## directly — pathfinding/collision for that is intentionally deferred
-## until it's actually needed (docs/03_combat_system.md).
+## CharacterBody3D (not a plain Node3D) since exploration needs to collide
+## with real dungeon walls (2026-09-17, first real dungeon layout) —
+## free-roam movement uses move_and_slide(). Gravity was added 2026-09-19
+## (motion_mode GROUNDED) so the player can walk up ramps/onto platforms
+## for the elevation system. Combat click-movement (_move_toward())
+## deliberately still bypasses physics and sets position directly —
+## pathfinding/collision for that is intentionally deferred until it's
+## actually needed (docs/03_combat_system.md); it just snaps to the ground
+## height at the destination.
 
 ## Referenced via preload rather than the bare class_name — see the note on
 ## PlayerScript in scripts/core/GameManager.gd for why.
@@ -30,6 +32,7 @@ const SkillDataScript := preload("res://scripts/data/SkillData.gd")
 enum MovementMode { FREE, COMBAT }
 
 const SPEED := 4.0  # free-roam movement units/sec — unrelated to the 속도 combat stat below
+const GRAVITY := 20.0  # placeholder feel value — units/sec^2, pulls the player onto platforms/ramps/floor
 
 signal died
 
@@ -142,18 +145,32 @@ func undo_movement() -> void:
 func _physics_process(delta: float) -> void:
 	if movement_mode == MovementMode.FREE:
 		_process_free_movement(delta)
-	# COMBAT mode movement is event-driven (mouse click, see _unhandled_input),
-	# not polled here.
+	else:
+		# COMBAT horizontal movement is event-driven (mouse click, see
+		# _unhandled_input) — this just keeps gravity settling the player
+		# onto the ground between/after those position jumps.
+		velocity.x = 0.0
+		velocity.z = 0.0
+		_apply_gravity(delta)
+		move_and_slide()
 
-func _process_free_movement(_delta: float) -> void:
+func _process_free_movement(delta: float) -> void:
 	var input_dir := Vector2(
 		Input.get_action_strength("move_right") - Input.get_action_strength("move_left"),
 		Input.get_action_strength("move_down") - Input.get_action_strength("move_up")
 	)
 	if input_dir != Vector2.ZERO:
 		input_dir = input_dir.normalized()
-	velocity = Vector3(input_dir.x, 0.0, input_dir.y) * SPEED
+	velocity.x = input_dir.x * SPEED
+	velocity.z = input_dir.y * SPEED
+	_apply_gravity(delta)
 	move_and_slide()
+
+func _apply_gravity(delta: float) -> void:
+	if is_on_floor():
+		velocity.y = 0.0
+	else:
+		velocity.y -= GRAVITY * delta
 
 func _unhandled_input(event: InputEvent) -> void:
 	if movement_mode != MovementMode.COMBAT or not is_my_turn:
@@ -165,7 +182,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event.button_index != MOUSE_BUTTON_LEFT:
 		return
-	var target = TargetingScript.raycast_to_floor_point(_camera, event.position, position.y)
+	var target = TargetingScript.raycast_to_ground(_camera, event.position, position.y)
 	if is_aiming():
 		var picked: Node3D = TargetingScript.pick_enemy(_camera, event.position)
 		if target == null:
@@ -192,6 +209,13 @@ func _move_toward(target: Vector3) -> void:
 	if actual_distance <= 0.001:
 		return
 	position += to_target.normalized() * actual_distance
+	# Combat movement sets position directly (no physics, no pathfinding),
+	# so match the ground height at the destination ourselves — otherwise
+	# a move off a platform would leave the player hovering/embedded until
+	# gravity catches up. Extra stamina for climbing isn't implemented yet.
+	var ground = TargetingScript.ground_height(get_world_3d(), position.x, position.z, position.y + 5.0)
+	if ground != null:
+		position.y = ground
 	current_stamina -= CombatFormulasScript.movement_stamina_cost(actual_distance)
 
 func enter_combat_mode() -> void:

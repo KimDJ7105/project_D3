@@ -10,7 +10,6 @@ radius = 0.4
 height = 1.2
 
 [node name="Player" type="CharacterBody3D"]
-motion_mode = 1
 script = ExtResource("1")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]

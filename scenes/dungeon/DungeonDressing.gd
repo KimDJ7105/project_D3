@@ -89,8 +89,17 @@ func _bake_navigation() -> void:
 	var nav_mesh := NavigationMesh.new()
 	nav_mesh.geometry_parsed_geometry_type = NavigationMesh.PARSED_GEOMETRY_STATIC_COLLIDERS
 	nav_mesh.geometry_collision_mask = 1
-	nav_mesh.agent_radius = 0.4   # matches the player's capsule
+	nav_mesh.agent_radius = 0.5   # player capsule is 0.4; rounded up to the 0.25 cell size anyway
 	nav_mesh.agent_height = 1.2
+	# The player can't step up ledges (only slide up slopes, and only over
+	# lips of a few cm), so the navmesh must not pretend it can. With the
+	# default 0.25 cell height / max climb, the ramp's exposed side edge
+	# counted as a walkable step and paths led the player into it sideways.
+	# A finer cell height keeps the ramp's gentle slope connected while a
+	# small max climb keeps genuine ledges as barriers.
+	nav_mesh.cell_height = 0.05
+	nav_mesh.agent_max_climb = 0.1
+	NavigationServer3D.map_set_cell_height(get_world_3d().navigation_map, nav_mesh.cell_height)
 	var source := NavigationMeshSourceGeometryData3D.new()
 	NavigationServer3D.parse_source_geometry_data(nav_mesh, source, get_parent())
 	NavigationServer3D.bake_from_source_geometry_data(nav_mesh, source)
